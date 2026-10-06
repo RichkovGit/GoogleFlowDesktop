@@ -26,7 +26,7 @@
 * **Решение:** 
   * Приложение автоматически прописывает политику высокой производительности в реестре Windows (`HKCU\Software\Microsoft\DirectX\UserGpuPreferences -> GpuPreference=2;`).
   * Флаги движка Chromium: `--force_high_performance_gpu --gpu-preference=2 --enable-features=VaapiVideoDecoder,D3D11VideoDecoder,PlatformHEVCDecoderSupport --enable-accelerated-video-decode`.
-  * Видеопотоки декодируются через выделенный блок **NVDEC** на видеокарте NVIDIA GeForce GTX 1650, освобождая процессор для фоновых задач.
+  * Видеопотоки декодируются через выделенный блок **NVDEC** на видеокарте например NVIDIA GeForce GTX 1650, освобождая процессор для фоновых задач.
 
 ### 2. 🔓 Встроенный обход геоблокировок (Google Labs Country Unlocker v4.1)
 * Не требуется установка Tampermonkey, расширений или VPN.
