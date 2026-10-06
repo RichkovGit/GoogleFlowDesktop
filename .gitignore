@@ -1,0 +1,24 @@
+# Binaries & Intermediate files
+*.tmp
+*.log
+crash.log
+updater.bat
+*.pdb
+*.obj
+push*.bat
+test*.bat
+
+# IDE & Editor files
+.vs/
+*.suo
+*.user
+.idea/
+.vscode/
+
+# Python Cache (legacy)
+__pycache__/
+*.pyc
+*.pyo
+build/
+dist/
+*.spec
