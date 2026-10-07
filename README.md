@@ -53,23 +53,16 @@
   * Prompt Wrapper (техническая рамка Masterpiece 8K).
   * Универсальный блок негативных промптов (Negative Prompt Sanitizer).
 
-### 5. ⚡ Пакетный генератор задач (Batch Engine)
-* **Multi-Seed Generator:** Генерация $N$ вариаций одной сцены с независимыми криптографическими сидами (`secure_random_uint32`).
-* **Cartesian Product Matrix:** Декартово произведение выбранных стилей и вариантов освещения ($M \times K$).
-* **Batch Reference Mapper:** Пакетная привязка списка файлов-референсов к единому модифицирующему промпту.
+### 5. 🚀 Мгновенная интеграция с Google Flow Canvas
+* **1-Клик вставка во Flow:** Кнопка «🚀 Вставить в Google Flow» автоматически инжектирует готовый собранный промпт в поле ввода холста Flow, переводит фокус и копирует текст в буфер обмена Windows для удобства `Ctrl+V`.
+* **Zero-Memory Trimmer:** Автоматическая оптимизация рабочего набора памяти (`SetProcessWorkingSetSize`) — потребление стабильно держится на уровне **~25–45 МБ ОЗУ**.
 
-### 6. 📋 Диспетчер воркеров & Очередь задач (Queue Manager)
-* Асинхронная очередь FIFO с семафорами параллелизма (`SemaphoreSlim(4, 4)` для изображений, `SemaphoreSlim(2, 2)` для видео).
-* **Zero-Memory SSD Streamer:** Прямая потоковая запись медиафайлов на диск без накопления в оперативной памяти.
-* **Sidecar JSON Metadata:** Автоматическое сохранение метаданных (промпт, модель, сид, параметры, метка времени) в формате `<file>.json` рядом с каждым файлом.
-* **Memory Trimmer:** Автоматическая оптимизация рабочего набора памяти (`SetProcessWorkingSetSize`) — потребление держится на стабильном уровне **~45–68 МБ ОЗУ**.
-
-### 7. 🔄 Система обновлений "По воздуху" (OTA Updates)
+### 6. 🔄 Система обновлений "По воздуху" (OTA Updates)
 * Приложение автоматически проверяет наличие новых версий на GitHub при запуске.
 * Встроенное диалоговое окно обновления с полным списком изменений (Release Notes).
 * Автоматическая загрузка нового исполняемого файла и самообновление в 1 клик через `updater.bat` без необходимости ручного скачивания.
 
-### 8. 📊 Живая телеметрия оборудования (WMI Telemetry)
+### 7. 📊 Живая телеметрия оборудования (WMI Telemetry)
 * Динамическое определение характеристик конкретной системы:
   * Дискретный GPU и VRAM (динамическое определение любой NVIDIA GeForce / AMD Radeon / Intel Arc).
   * Модель CPU, физические ядра и логические потоки (например, `11th Gen Intel Core i5-11400H, 6C/12T`).
@@ -114,14 +107,12 @@ build.bat
 │  - Microsoft Edge WebView2       │  - Microsoft Edge WebView2          │
 │  - Local HTTP Server (ui/)       │  - Target: https://flow.google.com  │
 │  - Chips & Dropdowns Presets     │  - Injected: unlocker.js v4.1       │
-│  - Batch Task Generators         │  - Injected: Floating Return Dock   │
-│  - Real-time Queue Manager       │  - Direct3D 11 / NVDEC Pipeline     │
+│  - 1-Click Prompt Injector       │  - Injected: Floating Return Dock   │
+│  - AI Prompt Optimizer           │  - Direct3D 11 / dGPU Pipeline      │
 │  - OTA Update Notifications      │  - Desktop Chrome User-Agent        │
 ├──────────────────────────────────┴─────────────────────────────────────┤
 │                         C# Backend Services                            │
 │  ├── GpuConfig.cs        -> DirectX 11 Registry & WMI Telemetry        │
-│  ├── WorkerDispatcher.cs -> FIFO Queue, Semaphores (4 img / 2 vid)     │
-│  ├── TaskEngine.cs       -> Multi-Seed / Cartesian / Ref Mapper        │
 │  ├── UpdateManager.cs    -> GitHub Live Version Checker & OTA Updater  │
 │  ├── Notifier.cs         -> Windows Toast Notifications & Chimes       │
 │  └── LocalServer.cs      -> Embedded HttpListener for Static Assets    │

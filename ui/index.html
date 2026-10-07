@@ -24,22 +24,6 @@
           <span class="nav-label">Студия</span>
         </button>
 
-        <button class="flow-nav-item" data-tab="batch" title="Пакетная генерация (Multi-Seed / Cartesian / Ref)">
-          <span class="nav-icon">⚡</span>
-          <span class="nav-label">Пакеты</span>
-        </button>
-
-        <button class="flow-nav-item" data-tab="queue" title="Очередь задач и активные рендеры">
-          <span class="nav-icon">📋</span>
-          <span class="nav-label">Очередь</span>
-          <span class="nav-badge" id="queueCountBadge">0</span>
-        </button>
-
-        <button class="flow-nav-item" data-tab="media" title="Локальная галерея и история версий (SSD)">
-          <span class="nav-icon">🖼️</span>
-          <span class="nav-label">Галерея</span>
-        </button>
-
         <button class="flow-nav-item" data-tab="gpu" title="Аппаратное ускорение dGPU и системная телеметрия">
           <span class="nav-icon">🎮</span>
           <span class="nav-label">Железо</span>
@@ -50,11 +34,6 @@
         <button class="flow-nav-item rail-tool-btn" id="btnCheckUpdateHeader" title="Проверить наличие OTA обновлений на GitHub">
           <span class="nav-icon">🔄</span>
           <span class="nav-label">OTA</span>
-        </button>
-
-        <button class="flow-nav-item rail-tool-btn" id="btnOpenFolder" title="Открыть папку проектов в проводнике Windows">
-          <span class="nav-icon">📁</span>
-          <span class="nav-label">Файлы</span>
         </button>
 
         <button class="flow-nav-item rail-tool-btn" id="btnTrimRamQuick" title="Очистить рабочую память процесса (Trim Working Set)">
@@ -80,11 +59,11 @@
           </div>
 
           <div class="view-action-group">
+            <button class="flow-btn flow-btn-ghost" id="btnCopyPromptTop" title="Скопировать готовый промпт в буфер">
+              <span class="btn-icon">📋</span> Копировать
+            </button>
             <button class="flow-btn flow-btn-accent glow-btn" id="btnSendToFlow" title="Вставить скомпилированный промпт прямо во Flow Canvas и скопировать в буфер">
               <span class="btn-icon">🚀</span> Вставить в Google Flow
-            </button>
-            <button class="flow-btn flow-btn-secondary" id="btnGenerateNow" title="Добавить текущий промпт в очередь локальной обработки dGPU">
-              <span class="btn-icon">⚡</span> В очередь
             </button>
           </div>
         </header>
@@ -256,9 +235,6 @@
                   <button class="flow-btn flow-btn-accent glow-btn btn-full" id="btnSendToFlowBottom">
                     <span class="btn-icon">🚀</span> Вставить в Google Flow Canvas
                   </button>
-                  <button class="flow-btn flow-btn-secondary btn-full" id="btnGenerateNowBottom">
-                    <span class="btn-icon">⚡</span> Добавить в локальную очередь
-                  </button>
                 </div>
               </div>
 
@@ -269,265 +245,7 @@
       </section>
 
       <!-- ======================================================== -->
-      <!-- TAB 2: BATCH TASK GENERATOR -->
-      <!-- ======================================================== -->
-      <section class="flow-tab-pane" id="tab-batch">
-        <header class="flow-view-header">
-          <div class="view-title-group">
-            <h2 class="view-title">⚡ Пакетный генератор задач</h2>
-            <span class="view-sub">Матричные комбинаторы, мульти-сид вариации и пакетная обработка</span>
-          </div>
-
-          <!-- Sub-mode Selector -->
-          <div class="flow-segmented-pills">
-            <button class="sub-seg-btn active" data-sub="multiseed">🌱 Multi-Seed</button>
-            <button class="sub-seg-btn" data-sub="cartesian">✖️ Cartesian Matrix</button>
-            <button class="sub-seg-btn" data-sub="refmapper">🖼️ Reference Mapper</button>
-          </div>
-        </header>
-
-        <div class="studio-scrollable-content">
-
-          <!-- Sub 1: Multi-Seed Generator -->
-          <div class="batch-sub-panel active" id="batch-sub-multiseed">
-            <div class="flow-card">
-              <div class="card-header-row">
-                <div class="card-label">
-                  <span class="label-dot accent-cyan"></span>
-                  <span>Генератор вариаций (Multi-Seed Generator)</span>
-                </div>
-                <span class="card-hint">Криптографические независимые сиды</span>
-              </div>
-
-              <div class="form-group-block">
-                <label class="form-label">Базовый промпт для серии вариаций:</label>
-                <textarea id="multiSeedPrompt" rows="3" class="flow-input">Кинематографичный портрет астронавта в скафандре на Марсе, золотой час, 85mm portrait lens, photorealistic</textarea>
-              </div>
-
-              <div class="form-row-flex">
-                <div class="form-group-block flex-1">
-                  <label class="form-label">Количество вариаций (N):</label>
-                  <div class="flow-stepper">
-                    <button class="stepper-btn" id="btnSeedMinus">-</button>
-                    <span class="stepper-val" id="seedCountLabel">4</span>
-                    <button class="stepper-btn" id="btnSeedPlus">+</button>
-                  </div>
-                </div>
-
-                <div class="form-group-block flex-1">
-                  <label class="form-label">Тип медиа:</label>
-                  <select id="multiSeedType" class="flow-select">
-                    <option value="image">Изображение (до 4 параллельно)</option>
-                    <option value="video">Видео (1-2 параллельно)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div class="batch-actions-row">
-                <button class="flow-btn flow-btn-accent glow-btn" id="btnLaunchMultiSeed">
-                  ⚡ Сформировать и отправить пакет задач в очередь
-                </button>
-                <button class="flow-btn flow-btn-secondary" id="btnSendMultiSeedToFlow">
-                  🚀 Вставить текущий во Flow Canvas
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Sub 2: Cartesian Matrix Combinator -->
-          <div class="batch-sub-panel" id="batch-sub-cartesian">
-            <div class="flow-card">
-              <div class="card-header-row">
-                <div class="card-label">
-                  <span class="label-dot accent-purple"></span>
-                  <span>Матричный комбинатор (Cartesian Product Matrix)</span>
-                </div>
-                <span class="card-hint">Subject × Styles × Lighting</span>
-              </div>
-
-              <div class="form-group-block">
-                <label class="form-label">Базовый объект (Subject):</label>
-                <input type="text" id="cartesianSubject" class="flow-input" value="Спортивный автомобиль будущего на шоссе">
-              </div>
-
-              <div class="matrix-columns-row">
-                <div class="matrix-box">
-                  <span class="matrix-box-title">Стили (Styles):</span>
-                  <div class="matrix-checklist" id="cartesianStylesList"></div>
-                </div>
-
-                <div class="matrix-box">
-                  <span class="matrix-box-title">Освещение (Lighting):</span>
-                  <div class="matrix-checklist" id="cartesianLightsList"></div>
-                </div>
-              </div>
-
-              <div class="matrix-info-ribbon">
-                <span>Итого комбинаций в матрице: <strong id="cartesianCountBadge" class="accent-number">0</strong></span>
-              </div>
-
-              <div class="batch-actions-row">
-                <button class="flow-btn flow-btn-accent glow-btn" id="btnLaunchCartesian">
-                  ⚡ Сформировать и отправить пакет задач
-                </button>
-                <button class="flow-btn flow-btn-secondary" id="btnSendCartesianToFlow">
-                  🚀 Вставить первый во Flow Canvas
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Sub 3: Batch Reference Mapper -->
-          <div class="batch-sub-panel" id="batch-sub-refmapper">
-            <div class="flow-card">
-              <div class="card-header-row">
-                <div class="card-label">
-                  <span class="label-dot accent-green"></span>
-                  <span>Пакетная обработка референсов (Batch Reference Mapper)</span>
-                </div>
-                <span class="card-hint">1 задача на каждый файл-источник</span>
-              </div>
-
-              <div class="form-group-block">
-                <label class="form-label">Общий модифицирующий промпт:</label>
-                <textarea id="refMapperPrompt" rows="2" class="flow-input">Превратить персонажа в киберпанк героя с неоновыми имплантами, 8k, photorealistic</textarea>
-              </div>
-
-              <div class="flow-dropzone" id="refDropzone">
-                <span class="drop-icon">📥</span>
-                <p>Нажмите для выбора изображений-референсов с диска</p>
-                <input type="file" id="refFileInput" multiple accept="image/*" style="display:none">
-              </div>
-
-              <div class="ref-files-tag-list" id="refFilesList"></div>
-
-              <div class="batch-actions-row">
-                <button class="flow-btn flow-btn-accent glow-btn" id="btnLaunchRefMapper">
-                  ⚡ Создать Reference пакет в очереди
-                </button>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </section>
-
-      <!-- ======================================================== -->
-      <!-- TAB 3: QUEUE MANAGER -->
-      <!-- ======================================================== -->
-      <section class="flow-tab-pane" id="tab-queue">
-        <header class="flow-view-header">
-          <div class="view-title-group">
-            <h2 class="view-title">📋 Очередь задач (Queue Manager)</h2>
-            <span class="view-sub">Асинхронная диспетчеризация воркеров dGPU и потоковая запись на SSD</span>
-          </div>
-
-          <div class="view-action-group">
-            <button class="flow-btn flow-btn-secondary" id="btnPauseQueue">⏸️ Пауза</button>
-            <button class="flow-btn flow-btn-ghost" id="btnClearQueue">🧹 Очистить готовые</button>
-          </div>
-        </header>
-
-        <!-- Stats Bar -->
-        <div class="queue-stats-strip">
-          <div class="q-stat-card">
-            <span class="q-stat-title">Всего</span>
-            <span class="q-stat-num" id="qStatTotal">0</span>
-          </div>
-          <div class="q-stat-card stat-active">
-            <span class="q-stat-title">Рендер dGPU</span>
-            <span class="q-stat-num" id="qStatActive">0</span>
-          </div>
-          <div class="q-stat-card stat-success">
-            <span class="q-stat-title">Готово</span>
-            <span class="q-stat-num" id="qStatDone">0</span>
-          </div>
-          <div class="q-stat-card stat-failed">
-            <span class="q-stat-title">Ошибки</span>
-            <span class="q-stat-num" id="qStatFailed">0</span>
-          </div>
-
-          <div class="q-semaphore-info">
-            <span>⚡ Сем. фото: <strong>4</strong></span>
-            <span>🎬 Сем. видео: <strong>2</strong></span>
-            <span>💾 Zero-Memory SSD Streamer</span>
-          </div>
-        </div>
-
-        <!-- Task Cards Grid -->
-        <div class="queue-scrollable-area">
-          <div class="queue-cards-grid" id="queueGrid">
-            <div class="queue-empty-state" id="queueEmptyState">
-              <span class="empty-icon">📋</span>
-              <h4>Очередь задач пуста</h4>
-              <p>Создайте промпт в Студии или запустите Пакетный генератор для начала рендера</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ======================================================== -->
-      <!-- TAB 4: MEDIA STACK & GALLERY -->
-      <!-- ======================================================== -->
-      <section class="flow-tab-pane" id="tab-media">
-        <header class="flow-view-header">
-          <div class="view-title-group">
-            <h2 class="view-title">🖼️ Медиа-стек и Галерея</h2>
-            <span class="view-sub">Локальные результаты генерации, JSON-метаданные и история версий</span>
-          </div>
-
-          <div class="view-action-group">
-            <button class="flow-btn flow-btn-secondary" id="btnRefreshGallery">🔄 Обновить</button>
-            <button class="flow-btn flow-btn-ghost" id="btnOpenInExplorer">📁 Открыть в проводнике</button>
-          </div>
-        </header>
-
-        <div class="media-split-layout">
-          <div class="media-gallery-col">
-            <div class="gallery-thumbs-grid" id="galleryGrid"></div>
-          </div>
-
-          <div class="media-inspector-col">
-            <div class="flow-card">
-              <div class="card-header-row">
-                <div class="card-label">
-                  <span class="label-dot accent-cyan"></span>
-                  <span>Медиа-стек (Версии объекта)</span>
-                </div>
-              </div>
-
-              <div class="version-ladder" id="versionFlowDisplay">
-                <div class="ladder-step active">
-                  <span class="ladder-badge">1</span>
-                  <div><strong>Исходник</strong><span id="vSrcLabel">Выберите файл</span></div>
-                </div>
-                <div class="ladder-step">
-                  <span class="ladder-badge">2</span>
-                  <div><strong>Вариация</strong><span id="vVarLabel">Сгенерировано</span></div>
-                </div>
-                <div class="ladder-step">
-                  <span class="ladder-badge">3</span>
-                  <div><strong>Апскейл</strong><span id="vUpscaleLabel">dGPU Enhanced</span></div>
-                </div>
-              </div>
-
-              <div class="sidecar-viewer-box">
-                <span class="viewer-title">📄 Метаданные (Sidecar JSON):</span>
-                <pre id="sidecarJsonContent">Выберите файл из галереи слева для просмотра параметров, промпта и сида.</pre>
-              </div>
-
-              <div class="inspector-buttons-bar" id="stackActionsBar" style="display:none;">
-                <button class="flow-btn flow-btn-accent glow-btn" id="btnReusePrompt">
-                  🚀 Вставить промпт во Flow
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ======================================================== -->
-      <!-- TAB 5: HARDWARE & dGPU TELEMETRY -->
+      <!-- TAB 2: HARDWARE & dGPU TELEMETRY -->
       <!-- ======================================================== -->
       <section class="flow-tab-pane" id="tab-gpu">
         <header class="flow-view-header">
@@ -571,7 +289,7 @@
               <div class="telem-info">
                 <span class="telem-title">Оперативная память (RAM)</span>
                 <strong class="telem-val accent-green" id="telemetryRamTotal">16.0 GB RAM</strong>
-                <span class="telem-sub" id="telemetryRamSub">Процесс Flow: ~28 MB • Zero-Memory SSD Streamer активен</span>
+                <span class="telem-sub" id="telemetryRamSub">Процесс Flow: ~28 MB • Авто-тримминг активен</span>
               </div>
             </div>
 
