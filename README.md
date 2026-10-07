@@ -146,9 +146,9 @@ GoogleFlowDesktop/
 │   ├── LocalServer.cs           # Встроенный легковесный веб-сервер HttpListener
 │   └── Notifier.cs              # Windows Toast уведомления и звуковые сигналы
 └── ui/                          # Frontend интерфейс Prompt Studio (Fluent Dark)
-    ├── index.html               # Разметка: Studio, Batch, Queue, Media, dGPU, OTA Modal
+    ├── index.html               # Разметка: Studio, Справочники тегов, dGPU, OTA Modal
     ├── style.css                # Стили Windows 11 Fluent Design (Dark Acrylic)
-    └── app.js                   # Реактивная логика чипов, очереди, телеметрии и OTA
+    └── app.js                   # Реактивная логика пресетов, инжектора, телеметрии и OTA
 ```
 
 ---
