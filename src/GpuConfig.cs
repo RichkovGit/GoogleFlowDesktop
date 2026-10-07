@@ -24,10 +24,10 @@ namespace GoogleFlowDesktop
 
         public HardwareSpecs()
         {
-            DgpuName = "NVIDIA GeForce GTX 1650";
-            DgpuVram = "4.0 GB";
+            DgpuName = "Дискретная видеокарта (dGPU)";
+            DgpuVram = "Выделенная VRAM";
             DgpuDriver = "";
-            IgpuName = "Intel(R) UHD Graphics";
+            IgpuName = "Интегрированная графика (iGPU)";
             IgpuVram = "2.0 GB";
             CpuName = "Intel Core i5";
             CpuCores = 6;

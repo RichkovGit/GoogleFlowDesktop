@@ -5,7 +5,7 @@
   "download_url": "https://github.com/RichkovGit/GoogleFlowDesktop/releases/latest/download/GoogleFlowDesktop.exe",
   "release_notes": [
     "🚀 Полная нативная реализация на C# (.NET) + Microsoft Edge WebView2",
-    "🎮 Принудительное аппаратное ускорение на дискретной видеокарте (NVIDIA GeForce GTX 1650)",
+    "🎮 Принудительное аппаратное ускорение на дискретной видеокарте (dGPU)",
     "🔓 Встроенный скрипт Google Flow & Labs Country Unlocker v4.1 (обход блокировок без VPN)",
     "◫ Двухоконный сплит-интерфейс Windows 11 Fluent Design с постоянным хэдером управления",
     "⚡ Студия промптов, пресеты, защитные директивы и негативные фильтры",

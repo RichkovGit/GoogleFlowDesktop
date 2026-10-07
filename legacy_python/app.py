@@ -443,7 +443,7 @@ class GoogleFlowAppForm(Form):
 def main():
     print(f"=== Starting {APP_NAME} v{APP_VERSION} ===")
     
-    # 1. Enforce Windows DirectX High Performance (Discrete GPU: GTX 1650) Registry
+    # 1. Enforce Windows DirectX High Performance (Discrete GPU: dGPU) Registry
     enforce_windows_directx_dgpu_preference()
     print("[App] Windows UserGpuPreferences configured: Discrete GPU forced (GpuPreference=2;)")
 

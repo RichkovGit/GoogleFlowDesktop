@@ -551,29 +551,65 @@ namespace GoogleFlowDesktop
 
         private void InjectPromptIntoFlow(string promptText)
         {
+            if (string.IsNullOrEmpty(promptText)) return;
             try
             {
-                if (wvFlow != null && !wvFlow.IsDisposed && wvFlow.CoreWebView2 != null && this.IsHandleCreated && !this.IsDisposed)
+                if (this.IsHandleCreated && !this.IsDisposed)
                 {
-                    string esc = Json.Serialize(promptText);
-                    string script = string.Format(@"
-if (window.__flowNativeBridge) {{
-    window.__flowNativeBridge.insertPrompt({0});
-}} else {{
-    const ta = document.querySelector('textarea, [contenteditable=""true""]');
-    if (ta) {{
-        ta.value = {0};
-        ta.dispatchEvent(new Event('input', {{ bubbles: true }}));
-    }}
-}}
-", esc);
                     this.BeginInvoke(new Action(() =>
                     {
                         try
                         {
+                            // 1. Copy directly to Windows Clipboard so user always has it for Ctrl+V
+                            try { Clipboard.SetText(promptText); } catch { }
+
+                            // 2. If currently in studio-only mode, switch to split mode so user sees Flow Canvas
+                            if (split.Panel2Collapsed)
+                            {
+                                SetViewMode("split");
+                            }
+
+                            // 3. Inject into Flow WebView DOM
                             if (wvFlow != null && !wvFlow.IsDisposed && wvFlow.CoreWebView2 != null)
                             {
+                                string esc = Json.Serialize(promptText);
+                                string script = string.Format(@"
+(function() {{
+    const text = {0};
+    if (window.__flowNativeBridge && window.__flowNativeBridge.insertPrompt(text)) {{
+        return true;
+    }}
+    const selectors = [
+        'textarea',
+        '[contenteditable=""true""]',
+        'input[type=""text""]',
+        '[role=""textbox""]',
+        'div[aria-label*=""prompt"" i]',
+        'p[data-placeholder]'
+    ];
+    for (const sel of selectors) {{
+        const elems = document.querySelectorAll(sel);
+        for (const el of elems) {{
+            if (el.offsetParent !== null) {{
+                el.focus();
+                if (el.tagName.toLowerCase() === 'textarea' || el.tagName.toLowerCase() === 'input') {{
+                    el.value = text;
+                    el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                    el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                }} else {{
+                    el.innerText = text;
+                    el.textContent = text;
+                    el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                }}
+                return true;
+            }}
+        }}
+    }}
+    return false;
+}})();
+", esc);
                                 wvFlow.CoreWebView2.ExecuteScriptAsync(script);
+                                wvFlow.Focus();
                             }
                         }
                         catch { }

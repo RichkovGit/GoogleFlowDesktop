@@ -6,539 +6,624 @@
   <title>Google Flow Desktop</title>
   <link rel="stylesheet" href="style.css">
 </head>
-<body class="fluent-uwp-app">
+<body class="flow-app">
 
-  <!-- Unified UWP / Windows 11 Command Header -->
-  <header class="uwp-header">
-    <div class="header-section header-left">
-      <div class="uwp-brand">
-        <div class="brand-glyph">⚡</div>
-        <div class="brand-titles">
-          <span class="brand-name">Google Flow</span>
-          <span class="brand-edition">Desktop</span>
-        </div>
+  <!-- Google Flow Workspace Container -->
+  <div class="flow-container">
+
+    <!-- 1. Left Vertical Navigation Rail (Google Flow Obsidian Rail) -->
+    <aside class="flow-nav-rail">
+      <div class="rail-brand" title="Google Flow Native Workspace">
+        <div class="rail-glyph">⚡</div>
+        <div class="rail-brand-sub">FLOW</div>
       </div>
 
-      <!-- Segmented View Mode Switcher (UWP SegmentedControl) -->
-      <div class="segmented-control" id="viewModeSelector">
-        <button class="segmented-btn active" data-mode="split" title="Двухоконный режим: Студия + Flow Canvas">
-          <span class="icon">◫</span> Сплит (50/50)
+      <nav class="rail-nav-items">
+        <button class="flow-nav-item active" data-tab="studio" title="Prompt Studio & Конструктор промптов">
+          <span class="nav-icon">✨</span>
+          <span class="nav-label">Студия</span>
         </button>
-        <button class="segmented-btn" data-mode="flow" title="Полноэкранный холст Google Flow">
-          <span class="icon">🎨</span> Только Flow
+
+        <button class="flow-nav-item" data-tab="batch" title="Пакетная генерация (Multi-Seed / Cartesian / Ref)">
+          <span class="nav-icon">⚡</span>
+          <span class="nav-label">Пакеты</span>
         </button>
-        <button class="segmented-btn" data-mode="studio" title="Полноэкранная студия промптов и очереди">
-          <span class="icon">✨</span> Только Студия
+
+        <button class="flow-nav-item" data-tab="queue" title="Очередь задач и активные рендеры">
+          <span class="nav-icon">📋</span>
+          <span class="nav-label">Очередь</span>
+          <span class="nav-badge" id="queueCountBadge">0</span>
+        </button>
+
+        <button class="flow-nav-item" data-tab="media" title="Локальная галерея и история версий (SSD)">
+          <span class="nav-icon">🖼️</span>
+          <span class="nav-label">Галерея</span>
+        </button>
+
+        <button class="flow-nav-item" data-tab="gpu" title="Аппаратное ускорение dGPU и системная телеметрия">
+          <span class="nav-icon">🎮</span>
+          <span class="nav-label">Железо</span>
+        </button>
+      </nav>
+
+      <div class="rail-bottom-tools">
+        <button class="flow-nav-item rail-tool-btn" id="btnCheckUpdateHeader" title="Проверить наличие OTA обновлений на GitHub">
+          <span class="nav-icon">🔄</span>
+          <span class="nav-label">OTA</span>
+        </button>
+
+        <button class="flow-nav-item rail-tool-btn" id="btnOpenFolder" title="Открыть папку проектов в проводнике Windows">
+          <span class="nav-icon">📁</span>
+          <span class="nav-label">Файлы</span>
+        </button>
+
+        <button class="flow-nav-item rail-tool-btn" id="btnTrimRamQuick" title="Очистить рабочую память процесса (Trim Working Set)">
+          <span class="nav-icon">🧹</span>
+          <span class="nav-label">RAM</span>
         </button>
       </div>
-    </div>
+    </aside>
 
-    <!-- Center: Flow Quick Bridge & Actions -->
-    <div class="header-section header-center">
-      <button class="uwp-btn uwp-btn-accent" id="btnSendToFlow" title="Вставить финальный промпт во Flow Canvas">
-        <span class="btn-icon">🚀</span> Вставить во Flow
-      </button>
+    <!-- 2. Main Content Area -->
+    <main class="flow-main-area">
 
-      <div class="flow-nav-cluster">
-        <button class="uwp-icon-btn" id="btnReloadFlow" title="Перезагрузить страницу Google Flow">
-          <span>🔄</span>
-        </button>
-        <button class="uwp-icon-btn" id="btnFlowHome" title="Перейти на главную flow.google.com">
-          <span>🏠</span>
-        </button>
-        <button class="uwp-icon-btn" id="btnFlowAbout" title="Открыть flow.google.com/about">
-          <span>🌐</span>
-        </button>
-      </div>
-    </div>
-
-    <!-- Right: Telemetry & Hardware Pill -->
-    <div class="header-section header-right">
-      <div class="hardware-pill" title="Аппаратное ускорение на дискретной видеокарте">
-        <span class="live-dot"></span>
-        <span id="gpuNameDisplay">NVIDIA GTX 1650</span>
-        <span class="pill-divider">•</span>
-        <span id="ramUsageDisplay">~24 MB</span>
-        <span class="pill-divider">•</span>
-        <span class="unlocker-tag">Unlocker v4.1</span>
-      </div>
-
-      <button class="uwp-pill-btn update-pill" id="btnCheckUpdateHeader" title="Проверить наличие OTA-обновлений на GitHub">
-        <span>🔄 v1.0.0</span>
-      </button>
-
-      <button class="uwp-icon-btn" id="btnOpenFolder" title="Открыть папку проектов в проводнике">
-        <span>📁</span>
-      </button>
-    </div>
-  </header>
-
-  <!-- Secondary UWP Navigation Bar (WinUI 3 TabView / NavigationView) -->
-  <nav class="uwp-subnav">
-    <div class="nav-tabs-wrapper">
-      <button class="uwp-tab active" data-tab="studio">
-        <span class="tab-icon">✨</span> Студия промптов
-      </button>
-      <button class="uwp-tab" data-tab="batch">
-        <span class="tab-icon">⚡</span> Пакетный генератор
-      </button>
-      <button class="uwp-tab" data-tab="queue">
-        <span class="tab-icon">📋</span> Очередь задач <span class="tab-counter" id="queueCountBadge">0</span>
-      </button>
-      <button class="uwp-tab" data-tab="media">
-        <span class="tab-icon">🖼️</span> Медиа-стек
-      </button>
-      <button class="uwp-tab" data-tab="gpu">
-        <span class="tab-icon">🎮</span> dGPU Настройки
-      </button>
-    </div>
-  </nav>
-
-  <!-- Main Viewport Panes -->
-  <main class="uwp-viewport">
-
-    <!-- 1. TAB: PROMPT STUDIO -->
-    <section class="tab-pane active" id="tab-studio">
-      <div class="studio-grid">
+      <!-- ======================================================== -->
+      <!-- TAB 1: PROMPT STUDIO -->
+      <!-- ======================================================== -->
+      <section class="flow-tab-pane active" id="tab-studio">
         
-        <!-- Left: Prompt Editor & Tag Chips -->
-        <div class="studio-col">
-          
-          <div class="uwp-card prompt-card">
-            <div class="card-title-bar">
-              <div class="title-with-badge">
-                <h3>📝 Описание сцены (Базовый промпт)</h3>
-              </div>
-              <div class="header-tools">
-                <button class="uwp-pill-btn" id="btnAiOptimize">
-                  ✨ Улучшить с ИИ (Optimizer)
-                </button>
-                <button class="uwp-link-btn" id="btnClearPrompt">Очистить</button>
-              </div>
-            </div>
-            
-            <textarea id="promptInput" rows="3" placeholder="Опишите желаемую сцену, персонажа или динамику...">Киберпанк девушка на мотоцикле под неоновым дождём в ночном городе будущего</textarea>
-
-            <!-- Aspect Ratio Selector (WinUI Pills) -->
-            <div class="ratio-bar">
-              <span class="ratio-label">Соотношение:</span>
-              <div class="ratio-pills" id="ratioChips">
-                <button class="pill ratio-chip" data-ratio="1:1">1:1</button>
-                <button class="pill ratio-chip active" data-ratio="16:9">16:9 (ПК/Кино)</button>
-                <button class="pill ratio-chip" data-ratio="9:16">9:16 (Stories)</button>
-                <button class="pill ratio-chip" data-ratio="4:3">4:3</button>
-                <button class="pill ratio-chip" data-ratio="3:4">3:4</button>
-              </div>
-            </div>
+        <!-- Top Studio Action Bar -->
+        <header class="flow-view-header">
+          <div class="view-title-group">
+            <h2 class="view-title">✨ Prompt Studio</h2>
+            <span class="view-sub">Конструктор кинематографичных промптов для Google Flow</span>
           </div>
 
-          <!-- Quick 1-Click Presets -->
-          <div class="uwp-card">
-            <div class="card-title-bar">
-              <h3>⚡ Готовые комплексные пресеты (1-клик)</h3>
-              <span class="subtext">Свет, оптика, стиль и суффикс</span>
-            </div>
-            <div class="preset-cards-grid" id="presetGrid"></div>
-          </div>
-
-          <!-- Tag Dictionaries (Chips & Dropdowns) -->
-          <div class="uwp-card">
-            <div class="card-title-bar">
-              <h3>🏷️ Справочник тегов (Dropdowns & Chips)</h3>
-              <span class="subtext">Кликните по тегу для добавления в промпт</span>
-            </div>
-
-            <!-- Optics -->
-            <div class="tag-row">
-              <div class="tag-label">📷 Оптика и ракурсы:</div>
-              <div class="chips-flow" id="chipsOptics"></div>
-            </div>
-
-            <!-- Lighting -->
-            <div class="tag-row">
-              <div class="tag-label">💡 Освещение:</div>
-              <div class="chips-flow" id="chipsLighting"></div>
-            </div>
-
-            <!-- Art Styles -->
-            <div class="tag-row">
-              <div class="tag-label">🎨 Художественные стили:</div>
-              <div class="chips-flow" id="chipsArtStyles"></div>
-            </div>
-
-            <!-- Video Dynamics -->
-            <div class="tag-row">
-              <div class="tag-label">🎬 Динамика видео:</div>
-              <div class="chips-flow" id="chipsVideoDynamics"></div>
-            </div>
-          </div>
-
-        </div>
-
-        <!-- Right: Protective Filters & Sanitizer & Live Preview -->
-        <div class="studio-col">
-
-          <!-- Protective Filters Card -->
-          <div class="uwp-card">
-            <div class="card-title-bar">
-              <h3>🛡️ Защитные фильтры и директивы</h3>
-            </div>
-
-            <div class="uwp-switch-row">
-              <div class="switch-meta">
-                <strong>Строгий русский язык</strong>
-                <span>Все надписи, диалоги и текст строго на русском</span>
-              </div>
-              <label class="uwp-switch">
-                <input type="checkbox" id="chkRussianOnly" checked>
-                <span class="slider"></span>
-              </label>
-            </div>
-
-            <div class="uwp-switch-row">
-              <div class="switch-meta">
-                <strong>Портретное сходство</strong>
-                <span>100% сходство лица, волос и одежды с референсом</span>
-              </div>
-              <label class="uwp-switch">
-                <input type="checkbox" id="chkPhotoLikeness" checked>
-                <span class="slider"></span>
-              </label>
-            </div>
-
-            <div class="uwp-switch-row">
-              <div class="switch-meta">
-                <strong>Zero Clutter (Без лишних людей)</strong>
-                <span>Категорический запрет толпы и лишних предметов</span>
-              </div>
-              <label class="uwp-switch">
-                <input type="checkbox" id="chkZeroClutter" checked>
-                <span class="slider"></span>
-              </label>
-            </div>
-
-            <div class="uwp-switch-row">
-              <div class="switch-meta">
-                <strong>Техническая обёртка (Prompt Wrapper)</strong>
-                <span>Авто-добавление жесткой рамки 8k Photorealism</span>
-              </div>
-              <label class="uwp-switch">
-                <input type="checkbox" id="chkPromptWrapper" checked>
-                <span class="slider"></span>
-              </label>
-            </div>
-          </div>
-
-          <!-- Negative Prompt Sanitizer -->
-          <div class="uwp-card">
-            <div class="card-title-bar">
-              <h3>🚫 Универсальный негативный промпт</h3>
-              <label class="uwp-switch switch-sm">
-                <input type="checkbox" id="chkEnableNegative" checked>
-                <span class="slider"></span>
-              </label>
-            </div>
-            <textarea id="negativePromptInput" rows="3"></textarea>
-            <span class="subtext">Удаляет артефакты, размытие, лишние пальцы и английские надписи.</span>
-          </div>
-
-          <!-- Live Assembled Prompt Preview -->
-          <div class="uwp-card preview-card">
-            <div class="card-title-bar">
-              <h3>👁️ Собранный технический промпт</h3>
-              <button class="uwp-link-btn" id="btnCopyCompiled">📋 Копировать</button>
-            </div>
-            <div class="compiled-display" id="compiledPromptDisplay"></div>
-
-            <button class="uwp-btn uwp-btn-primary btn-block" id="btnGenerateNow">
-              🚀 Добавить в очередь генерации
+          <div class="view-action-group">
+            <button class="flow-btn flow-btn-accent glow-btn" id="btnSendToFlow" title="Вставить скомпилированный промпт прямо во Flow Canvas и скопировать в буфер">
+              <span class="btn-icon">🚀</span> Вставить в Google Flow
+            </button>
+            <button class="flow-btn flow-btn-secondary" id="btnGenerateNow" title="Добавить текущий промпт в очередь локальной обработки dGPU">
+              <span class="btn-icon">⚡</span> В очередь
             </button>
           </div>
+        </header>
 
-        </div>
+        <div class="studio-scrollable-content">
+          <div class="studio-two-col">
 
-      </div>
-    </section>
+            <!-- Column 1: Prompt Input, Ratio, Presets, Tags -->
+            <div class="studio-col-left">
 
-    <!-- 2. TAB: BATCH TASK GENERATOR -->
-    <section class="tab-pane" id="tab-batch">
-      <div class="batch-shell">
-        <div class="segmented-control sub-segmented">
-          <button class="segmented-btn active" data-sub="multiseed">🌱 Multi-Seed Generator</button>
-          <button class="segmented-btn" data-sub="cartesian">✖️ Cartesian Product Matrix</button>
-          <button class="segmented-btn" data-sub="refmapper">🖼️ Batch Reference Mapper</button>
-        </div>
+              <!-- Prompt Input Card -->
+              <div class="flow-card prompt-card-box">
+                <div class="card-header-row">
+                  <div class="card-label">
+                    <span class="label-dot"></span>
+                    <span>Описание сцены (Базовый промпт)</span>
+                  </div>
+                  <div class="card-header-actions">
+                    <button class="chip-btn chip-ai" id="btnAiOptimize" title="Автоматически обогатить промпт кинематографичными деталями">
+                      🪄 Улучшить с ИИ
+                    </button>
+                    <button class="chip-btn chip-ghost" id="btnClearPrompt">Очистить</button>
+                  </div>
+                </div>
 
-        <!-- Sub 1: Multi Seed -->
-        <div class="sub-pane active" id="batch-sub-multiseed">
-          <div class="uwp-card">
-            <div class="card-title-bar">
-              <h3>🌱 Генератор вариаций (Multi-Seed Generator)</h3>
-              <span class="subtext">Создаёт N задач с независимыми сидами (secure_random_uint32)</span>
-            </div>
-            <div class="form-row">
-              <label>Базовый промпт:</label>
-              <textarea id="multiSeedPrompt" rows="3">Кинематографичный портрет астронавта в скафандре на Марсе, золотой час, 85mm portrait lens</textarea>
-            </div>
-            <div class="form-flex">
-              <div class="form-group">
-                <label>Количество вариаций (N):</label>
-                <div class="uwp-stepper">
-                  <button class="stepper-btn" id="btnSeedMinus">-</button>
-                  <span id="seedCountLabel">4</span>
-                  <button class="stepper-btn" id="btnSeedPlus">+</button>
+                <div class="prompt-input-wrapper">
+                  <textarea id="promptInput" rows="3" placeholder="Опишите желаемую сцену, персонажа, действие или атмосферу для Google Flow...">Киберпанк девушка на мотоцикле под неоновым дождём в ночном городе будущего</textarea>
+                  <div class="prompt-input-footer">
+                    <span class="char-count" id="promptCharCount">72 симв.</span>
+                    <button class="btn-link" id="btnCopyPromptDirect" title="Скопировать только базовый текст">📋 Копировать текст</button>
+                  </div>
+                </div>
+
+                <!-- Aspect Ratio Selector (Google Flow Pills) -->
+                <div class="ratio-selection-row">
+                  <span class="ratio-title">Соотношение сторон:</span>
+                  <div class="ratio-pill-group" id="ratioChips">
+                    <button class="flow-ratio-pill" data-ratio="1:1">1:1</button>
+                    <button class="flow-ratio-pill active" data-ratio="16:9">16:9 (Кино/ПК)</button>
+                    <button class="flow-ratio-pill" data-ratio="9:16">9:16 (Shorts)</button>
+                    <button class="flow-ratio-pill" data-ratio="4:3">4:3</button>
+                    <button class="flow-ratio-pill" data-ratio="3:4">3:4</button>
+                  </div>
                 </div>
               </div>
-              <div class="form-group">
-                <label>Тип медиа:</label>
-                <select id="multiSeedType" class="uwp-select">
-                  <option value="image">Изображение (до 4 параллельно)</option>
-                  <option value="video">Видео (1-2 параллельно)</option>
-                </select>
+
+              <!-- 1-Click Complete Presets -->
+              <div class="flow-card">
+                <div class="card-header-row">
+                  <div class="card-label">
+                    <span class="label-dot accent-cyan"></span>
+                    <span>1-Клик Пресеты (Свет, оптика, стиль и суффикс)</span>
+                  </div>
+                  <span class="card-hint">Готовые связки</span>
+                </div>
+                <div class="presets-flow-grid" id="presetGrid"></div>
+              </div>
+
+              <!-- Tag Dictionaries (Chips & Dropdowns) -->
+              <div class="flow-card">
+                <div class="card-header-row">
+                  <div class="card-label">
+                    <span class="label-dot accent-purple"></span>
+                    <span>Справочник тегов (Интерактивные чипы)</span>
+                  </div>
+                  <span class="card-hint">Кликните для добавления</span>
+                </div>
+
+                <!-- Optics -->
+                <div class="tag-section">
+                  <div class="tag-cat-title">📷 Оптика и ракурсы:</div>
+                  <div class="chips-container" id="chipsOptics"></div>
+                </div>
+
+                <!-- Lighting -->
+                <div class="tag-section">
+                  <div class="tag-cat-title">💡 Стили освещения:</div>
+                  <div class="chips-container" id="chipsLighting"></div>
+                </div>
+
+                <!-- Art Styles -->
+                <div class="tag-section">
+                  <div class="tag-cat-title">🎨 Художественные стили:</div>
+                  <div class="chips-container" id="chipsArtStyles"></div>
+                </div>
+
+                <!-- Video Dynamics -->
+                <div class="tag-section">
+                  <div class="tag-cat-title">🎬 Динамика камеры и видео:</div>
+                  <div class="chips-container" id="chipsVideoDynamics"></div>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Column 2: Filters, Negative Prompt, Compiled Box -->
+            <div class="studio-col-right">
+
+              <!-- Protective Filters -->
+              <div class="flow-card">
+                <div class="card-header-row">
+                  <div class="card-label">
+                    <span class="label-dot accent-green"></span>
+                    <span>Защитные фильтры и директивы</span>
+                  </div>
+                </div>
+
+                <div class="toggle-list">
+                  <label class="flow-toggle-item">
+                    <div class="toggle-text">
+                      <strong>Строгий русский язык</strong>
+                      <span>Текст и диалоги строго на русском языке</span>
+                    </div>
+                    <input type="checkbox" id="chkRussianOnly" class="flow-switch" checked>
+                  </label>
+
+                  <label class="flow-toggle-item">
+                    <div class="toggle-text">
+                      <strong>Портретное сходство (100% likeness)</strong>
+                      <span>Сохранение лица, прически и одежды референса</span>
+                    </div>
+                    <input type="checkbox" id="chkPhotoLikeness" class="flow-switch" checked>
+                  </label>
+
+                  <label class="flow-toggle-item">
+                    <div class="toggle-text">
+                      <strong>Фильтр «Zero Clutter»</strong>
+                      <span>Запрет случайных прохожих и постороннего мусора</span>
+                    </div>
+                    <input type="checkbox" id="chkZeroClutter" class="flow-switch" checked>
+                  </label>
+
+                  <label class="flow-toggle-item">
+                    <div class="toggle-text">
+                      <strong>Техническая обёртка (Prompt Wrapper)</strong>
+                      <span>Рамка Masterpiece 8K resolution photorealism</span>
+                    </div>
+                    <input type="checkbox" id="chkPromptWrapper" class="flow-switch" checked>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Negative Prompt Sanitizer -->
+              <div class="flow-card">
+                <div class="card-header-row">
+                  <div class="card-label">
+                    <span class="label-dot accent-red"></span>
+                    <span>Универсальный негативный фильтр</span>
+                  </div>
+                  <input type="checkbox" id="chkEnableNegative" class="flow-switch" checked>
+                </div>
+                <textarea id="negativePromptInput" rows="3" class="flow-input"></textarea>
+                <span class="subtext-tip">Автоматически фильтрует деформации, артефакты, водяные знаки и размытие.</span>
+              </div>
+
+              <!-- Compiled Technical Prompt Preview Card -->
+              <div class="flow-card compiled-card">
+                <div class="card-header-row">
+                  <div class="card-label">
+                    <span class="label-dot accent-cyan"></span>
+                    <span>Итоговый технический промпт</span>
+                  </div>
+                  <button class="chip-btn chip-ghost" id="btnCopyCompiled">📋 Скопировать</button>
+                </div>
+
+                <div class="compiled-prompt-display" id="compiledPromptDisplay"></div>
+
+                <div class="compiled-actions-bar">
+                  <button class="flow-btn flow-btn-accent glow-btn btn-full" id="btnSendToFlowBottom">
+                    <span class="btn-icon">🚀</span> Вставить в Google Flow Canvas
+                  </button>
+                  <button class="flow-btn flow-btn-secondary btn-full" id="btnGenerateNowBottom">
+                    <span class="btn-icon">⚡</span> Добавить в локальную очередь
+                  </button>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      <!-- ======================================================== -->
+      <!-- TAB 2: BATCH TASK GENERATOR -->
+      <!-- ======================================================== -->
+      <section class="flow-tab-pane" id="tab-batch">
+        <header class="flow-view-header">
+          <div class="view-title-group">
+            <h2 class="view-title">⚡ Пакетный генератор задач</h2>
+            <span class="view-sub">Матричные комбинаторы, мульти-сид вариации и пакетная обработка</span>
+          </div>
+
+          <!-- Sub-mode Selector -->
+          <div class="flow-segmented-pills">
+            <button class="sub-seg-btn active" data-sub="multiseed">🌱 Multi-Seed</button>
+            <button class="sub-seg-btn" data-sub="cartesian">✖️ Cartesian Matrix</button>
+            <button class="sub-seg-btn" data-sub="refmapper">🖼️ Reference Mapper</button>
+          </div>
+        </header>
+
+        <div class="studio-scrollable-content">
+
+          <!-- Sub 1: Multi-Seed Generator -->
+          <div class="batch-sub-panel active" id="batch-sub-multiseed">
+            <div class="flow-card">
+              <div class="card-header-row">
+                <div class="card-label">
+                  <span class="label-dot accent-cyan"></span>
+                  <span>Генератор вариаций (Multi-Seed Generator)</span>
+                </div>
+                <span class="card-hint">Криптографические независимые сиды</span>
+              </div>
+
+              <div class="form-group-block">
+                <label class="form-label">Базовый промпт для серии вариаций:</label>
+                <textarea id="multiSeedPrompt" rows="3" class="flow-input">Кинематографичный портрет астронавта в скафандре на Марсе, золотой час, 85mm portrait lens, photorealistic</textarea>
+              </div>
+
+              <div class="form-row-flex">
+                <div class="form-group-block flex-1">
+                  <label class="form-label">Количество вариаций (N):</label>
+                  <div class="flow-stepper">
+                    <button class="stepper-btn" id="btnSeedMinus">-</button>
+                    <span class="stepper-val" id="seedCountLabel">4</span>
+                    <button class="stepper-btn" id="btnSeedPlus">+</button>
+                  </div>
+                </div>
+
+                <div class="form-group-block flex-1">
+                  <label class="form-label">Тип медиа:</label>
+                  <select id="multiSeedType" class="flow-select">
+                    <option value="image">Изображение (до 4 параллельно)</option>
+                    <option value="video">Видео (1-2 параллельно)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="batch-actions-row">
+                <button class="flow-btn flow-btn-accent glow-btn" id="btnLaunchMultiSeed">
+                  ⚡ Сформировать и отправить пакет задач в очередь
+                </button>
+                <button class="flow-btn flow-btn-secondary" id="btnSendMultiSeedToFlow">
+                  🚀 Вставить текущий во Flow Canvas
+                </button>
               </div>
             </div>
-            <button class="uwp-btn uwp-btn-accent" id="btnLaunchMultiSeed">
-              ⚡ Сформировать и отправить пакет задач
-            </button>
           </div>
-        </div>
 
-        <!-- Sub 2: Cartesian Matrix -->
-        <div class="sub-pane" id="batch-sub-cartesian">
-          <div class="uwp-card">
-            <div class="card-title-bar">
-              <h3>✖️ Матричный комбинатор (Cartesian Product Matrix)</h3>
-              <span class="subtext">Декартово произведение: Subject + Style[i] + Lighting[j]</span>
-            </div>
-            <div class="form-row">
-              <label>Базовый объект (Subject):</label>
-              <input type="text" id="cartesianSubject" class="uwp-input" value="Спортивный автомобиль будущего на шоссе">
-            </div>
-            <div class="matrix-grid">
-              <div class="matrix-box">
-                <strong>Выберите стили:</strong>
-                <div class="checklist" id="cartesianStylesList"></div>
+          <!-- Sub 2: Cartesian Matrix Combinator -->
+          <div class="batch-sub-panel" id="batch-sub-cartesian">
+            <div class="flow-card">
+              <div class="card-header-row">
+                <div class="card-label">
+                  <span class="label-dot accent-purple"></span>
+                  <span>Матричный комбинатор (Cartesian Product Matrix)</span>
+                </div>
+                <span class="card-hint">Subject × Styles × Lighting</span>
               </div>
-              <div class="matrix-box">
-                <strong>Выберите освещение:</strong>
-                <div class="checklist" id="cartesianLightsList"></div>
+
+              <div class="form-group-block">
+                <label class="form-label">Базовый объект (Subject):</label>
+                <input type="text" id="cartesianSubject" class="flow-input" value="Спортивный автомобиль будущего на шоссе">
+              </div>
+
+              <div class="matrix-columns-row">
+                <div class="matrix-box">
+                  <span class="matrix-box-title">Стили (Styles):</span>
+                  <div class="matrix-checklist" id="cartesianStylesList"></div>
+                </div>
+
+                <div class="matrix-box">
+                  <span class="matrix-box-title">Освещение (Lighting):</span>
+                  <div class="matrix-checklist" id="cartesianLightsList"></div>
+                </div>
+              </div>
+
+              <div class="matrix-info-ribbon">
+                <span>Итого комбинаций в матрице: <strong id="cartesianCountBadge" class="accent-number">0</strong></span>
+              </div>
+
+              <div class="batch-actions-row">
+                <button class="flow-btn flow-btn-accent glow-btn" id="btnLaunchCartesian">
+                  ⚡ Сформировать и отправить пакет задач
+                </button>
+                <button class="flow-btn flow-btn-secondary" id="btnSendCartesianToFlow">
+                  🚀 Вставить первый во Flow Canvas
+                </button>
               </div>
             </div>
-            <div class="matrix-summary">
-              <span>Итого комбинаций в пакете: <strong id="cartesianCountBadge">0</strong></span>
+          </div>
+
+          <!-- Sub 3: Batch Reference Mapper -->
+          <div class="batch-sub-panel" id="batch-sub-refmapper">
+            <div class="flow-card">
+              <div class="card-header-row">
+                <div class="card-label">
+                  <span class="label-dot accent-green"></span>
+                  <span>Пакетная обработка референсов (Batch Reference Mapper)</span>
+                </div>
+                <span class="card-hint">1 задача на каждый файл-источник</span>
+              </div>
+
+              <div class="form-group-block">
+                <label class="form-label">Общий модифицирующий промпт:</label>
+                <textarea id="refMapperPrompt" rows="2" class="flow-input">Превратить персонажа в киберпанк героя с неоновыми имплантами, 8k, photorealistic</textarea>
+              </div>
+
+              <div class="flow-dropzone" id="refDropzone">
+                <span class="drop-icon">📥</span>
+                <p>Нажмите для выбора изображений-референсов с диска</p>
+                <input type="file" id="refFileInput" multiple accept="image/*" style="display:none">
+              </div>
+
+              <div class="ref-files-tag-list" id="refFilesList"></div>
+
+              <div class="batch-actions-row">
+                <button class="flow-btn flow-btn-accent glow-btn" id="btnLaunchRefMapper">
+                  ⚡ Создать Reference пакет в очереди
+                </button>
+              </div>
             </div>
-            <button class="uwp-btn uwp-btn-accent" id="btnLaunchCartesian">
-              ⚡ Сгенерировать матричный пакет задач
-            </button>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ======================================================== -->
+      <!-- TAB 3: QUEUE MANAGER -->
+      <!-- ======================================================== -->
+      <section class="flow-tab-pane" id="tab-queue">
+        <header class="flow-view-header">
+          <div class="view-title-group">
+            <h2 class="view-title">📋 Очередь задач (Queue Manager)</h2>
+            <span class="view-sub">Асинхронная диспетчеризация воркеров dGPU и потоковая запись на SSD</span>
+          </div>
+
+          <div class="view-action-group">
+            <button class="flow-btn flow-btn-secondary" id="btnPauseQueue">⏸️ Пауза</button>
+            <button class="flow-btn flow-btn-ghost" id="btnClearQueue">🧹 Очистить готовые</button>
+          </div>
+        </header>
+
+        <!-- Stats Bar -->
+        <div class="queue-stats-strip">
+          <div class="q-stat-card">
+            <span class="q-stat-title">Всего</span>
+            <span class="q-stat-num" id="qStatTotal">0</span>
+          </div>
+          <div class="q-stat-card stat-active">
+            <span class="q-stat-title">Рендер dGPU</span>
+            <span class="q-stat-num" id="qStatActive">0</span>
+          </div>
+          <div class="q-stat-card stat-success">
+            <span class="q-stat-title">Готово</span>
+            <span class="q-stat-num" id="qStatDone">0</span>
+          </div>
+          <div class="q-stat-card stat-failed">
+            <span class="q-stat-title">Ошибки</span>
+            <span class="q-stat-num" id="qStatFailed">0</span>
+          </div>
+
+          <div class="q-semaphore-info">
+            <span>⚡ Сем. фото: <strong>4</strong></span>
+            <span>🎬 Сем. видео: <strong>2</strong></span>
+            <span>💾 Zero-Memory SSD Streamer</span>
           </div>
         </div>
 
-        <!-- Sub 3: Reference Mapper -->
-        <div class="sub-pane" id="batch-sub-refmapper">
-          <div class="uwp-card">
-            <div class="card-title-bar">
-              <h3>🖼️ Пакетная обработка референсов (Batch Reference Mapper)</h3>
-              <span class="subtext">Создает ровно 1 задачу на каждый входной файл как reference</span>
-            </div>
-            <div class="form-row">
-              <label>Общий модифицирующий промпт:</label>
-              <textarea id="refMapperPrompt" rows="2">Превратить персонажа в киберпанк героя с неоновыми имплантами, 8k, photorealistic</textarea>
-            </div>
-            <div class="uwp-dropzone" id="refDropzone">
-              <span class="drop-glyph">📥</span>
-              <p>Нажмите для выбора изображений-референсов</p>
-              <input type="file" id="refFileInput" multiple accept="image/*" style="display:none">
-            </div>
-            <div class="files-tag-list" id="refFilesList"></div>
-            <button class="uwp-btn uwp-btn-accent" id="btnLaunchRefMapper">
-              ⚡ Создать Reference пакет
-            </button>
-          </div>
-        </div>
-
-      </div>
-    </section>
-
-    <!-- 3. TAB: QUEUE MANAGER -->
-    <section class="tab-pane" id="tab-queue">
-      <div class="queue-shell">
-        
-        <div class="uwp-card queue-bar">
-          <div class="stats-ribbon">
-            <div class="stat-pill">
-              <span class="stat-label">Всего задач</span>
-              <span class="stat-num" id="qStatTotal">0</span>
-            </div>
-            <div class="stat-pill active-pill">
-              <span class="stat-label">В обработке</span>
-              <span class="stat-num" id="qStatActive">0</span>
-            </div>
-            <div class="stat-pill success-pill">
-              <span class="stat-label">Готово</span>
-              <span class="stat-num" id="qStatDone">0</span>
-            </div>
-            <div class="stat-pill error-pill">
-              <span class="stat-label">Ошибки</span>
-              <span class="stat-num" id="qStatFailed">0</span>
-            </div>
-          </div>
-
-          <div class="sem-badges">
-            <span class="sem-item">⚡ Картинки: <strong>макс 4</strong></span>
-            <span class="sem-item">🎬 Видео: <strong>макс 2</strong></span>
-            <span class="sem-item">💾 Zero-Memory SSD Stream</span>
-          </div>
-
-          <div class="queue-action-btns">
-            <button class="uwp-btn uwp-btn-secondary" id="btnPauseQueue">⏸️ Пауза</button>
-            <button class="uwp-link-btn" id="btnClearQueue">🧹 Очистить</button>
-          </div>
-        </div>
-
-        <div class="tasks-card-grid" id="queueGrid">
-          <div class="uwp-empty" id="queueEmptyState">
-            <span>📋</span>
-            <h4>Очередь задач пуста</h4>
-            <p>Сформируйте промпт в Студии или запустите Пакетный генератор</p>
-          </div>
-        </div>
-
-      </div>
-    </section>
-
-    <!-- 4. TAB: MEDIA STACK & GALLERY -->
-    <section class="tab-pane" id="tab-media">
-      <div class="media-shell">
-        <div class="gallery-section">
-          <div class="section-title-bar">
-            <h3>🖼️ Локальная галерея проектов (SSD)</h3>
-            <button class="uwp-link-btn" id="btnRefreshGallery">🔄 Обновить</button>
-          </div>
-          <div class="gallery-flow-grid" id="galleryGrid"></div>
-        </div>
-
-        <div class="inspector-section uwp-card">
-          <div class="card-title-bar">
-            <h3>📜 Медиа-стек (История версий объекта)</h3>
-          </div>
-          <div class="version-ladder" id="versionFlowDisplay">
-            <div class="ladder-step active">
-              <span class="ladder-badge">1</span>
-              <div><strong>Исходник</strong><span id="vSrcLabel">Выберите файл</span></div>
-            </div>
-            <div class="ladder-step">
-              <span class="ladder-badge">2</span>
-              <div><strong>Вариация</strong><span id="vVarLabel">Сгенерировано</span></div>
-            </div>
-            <div class="ladder-step">
-              <span class="ladder-badge">3</span>
-              <div><strong>Апскейл</strong><span id="vUpscaleLabel">8k dGPU</span></div>
-            </div>
-          </div>
-
-          <div class="json-inspector">
-            <h4>📄 Метаданные (Sidecar JSON):</h4>
-            <pre id="sidecarJsonContent">Выберите файл из галереи слева для просмотра параметров и сида.</pre>
-          </div>
-
-          <div class="inspector-actions" id="stackActionsBar" style="display:none;">
-            <button class="uwp-btn uwp-btn-accent" id="btnReusePrompt">✨ Использовать этот промпт</button>
-            <button class="uwp-btn uwp-btn-secondary" id="btnOpenInExplorer">📂 Открыть в папке</button>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- 5. TAB: GPU TELEMETRY & HARDWARE -->
-    <section class="tab-pane" id="tab-gpu">
-      <div class="gpu-shell uwp-card">
-        <div class="card-title-bar">
-          <h3>🎮 Конфигурация аппаратного ускорения и дискретной видеокарты</h3>
-        </div>
-
-        <div class="gpu-tiles-grid">
-          <!-- 1. Discrete GPU -->
-          <div class="gpu-tile">
-            <div class="tile-icon">🎮</div>
-            <div>
-              <div class="tile-title">Дискретная видеокарта (dGPU)</div>
-              <div class="tile-val accent" id="telemetryDgpuName">NVIDIA GeForce GTX 1650 (4.0 GB VRAM)</div>
-              <div class="tile-sub" id="telemetryDgpuSub">DirectX 11 / NVDEC • High Performance (GpuPreference=2)</div>
-            </div>
-          </div>
-
-          <!-- 2. CPU Processor -->
-          <div class="gpu-tile">
-            <div class="tile-icon">💻</div>
-            <div>
-              <div class="tile-title">Центральный процессор (CPU)</div>
-              <div class="tile-val accent" id="telemetryCpuName">Intel Core i5 (6 ядер, 12 потоков)</div>
-              <div class="tile-sub" id="telemetryCpuSub">Разгружен от видео-рендеринга благодаря Direct3D 11</div>
-            </div>
-          </div>
-
-          <!-- 3. RAM Memory -->
-          <div class="gpu-tile">
-            <div class="tile-icon">💾</div>
-            <div>
-              <div class="tile-title">Оперативная память (RAM)</div>
-              <div class="tile-val accent" id="telemetryRamTotal">16.0 GB RAM (Свободно: 8.0 GB)</div>
-              <div class="tile-sub" id="telemetryRamSub">Процесс Flow: ~25 MB • Zero-Memory SSD Streamer активен</div>
-            </div>
-          </div>
-
-          <!-- 4. Integrated Graphics -->
-          <div class="gpu-tile">
-            <div class="tile-icon">🔋</div>
-            <div>
-              <div class="tile-title">Интегрированная графика (iGPU)</div>
-              <div class="tile-val accent" id="telemetryIgpuName">Intel(R) UHD Graphics (2.0 GB VRAM)</div>
-              <div class="tile-sub" id="telemetryIgpuSub">Фоновый режим • Не перегревает процессор при прогрузке видео</div>
-            </div>
-          </div>
-
-          <!-- 5. Hardware Video Decoding -->
-          <div class="gpu-tile">
-            <div class="tile-icon">⚡</div>
-            <div>
-              <div class="tile-title">Аппаратное декодирование видео</div>
-              <div class="tile-val accent" id="telemetryDecoder">DirectX 11 / NVDEC Активен</div>
-              <div class="tile-sub" id="telemetryDecoderSub">--force_high_performance_gpu --enable-accelerated-video-decode</div>
-            </div>
-          </div>
-
-          <!-- 6. Country Unlocker Hook -->
-          <div class="gpu-tile">
-            <div class="tile-icon">🔓</div>
-            <div>
-              <div class="tile-title">Разблокировка регионов (Google Labs)</div>
-              <div class="tile-val accent" id="telemetryUnlocker">Closure Stream Hook v4.1 (Активен)</div>
-              <div class="tile-sub" id="telemetryUnlockerSub">Автоматический патч RPC cPZSdc, tRPC и WIZ_global_data</div>
-            </div>
-          </div>
-
-          <!-- 7. OTA Updates -->
-          <div class="gpu-tile">
-            <div class="tile-icon">🔄</div>
-            <div>
-              <div class="tile-title">Система OTA-обновлений (GitHub Live)</div>
-              <div class="tile-val accent" id="telemetryUpdateStatus">Версия v1.0.0 (Актуальная)</div>
-              <div class="tile-sub" id="telemetryUpdateSub">Репозиторий: RichkovGit/GoogleFlowDesktop • Проверка в 1 клик</div>
+        <!-- Task Cards Grid -->
+        <div class="queue-scrollable-area">
+          <div class="queue-cards-grid" id="queueGrid">
+            <div class="queue-empty-state" id="queueEmptyState">
+              <span class="empty-icon">📋</span>
+              <h4>Очередь задач пуста</h4>
+              <p>Создайте промпт в Студии или запустите Пакетный генератор для начала рендера</p>
             </div>
           </div>
         </div>
+      </section>
 
-        <div class="gpu-foot-actions">
-          <button class="uwp-btn uwp-btn-accent" id="btnTrimMemoryNow">🧹 Очистить память (Trim RAM)</button>
-          <button class="uwp-btn uwp-btn-secondary" id="btnCheckUpdateManual">🔄 Проверить OTA обновления</button>
-          <button class="uwp-btn uwp-btn-secondary" id="btnReapplyGpuRegistry">⚙️ Перерегистрировать dGPU</button>
+      <!-- ======================================================== -->
+      <!-- TAB 4: MEDIA STACK & GALLERY -->
+      <!-- ======================================================== -->
+      <section class="flow-tab-pane" id="tab-media">
+        <header class="flow-view-header">
+          <div class="view-title-group">
+            <h2 class="view-title">🖼️ Медиа-стек и Галерея</h2>
+            <span class="view-sub">Локальные результаты генерации, JSON-метаданные и история версий</span>
+          </div>
+
+          <div class="view-action-group">
+            <button class="flow-btn flow-btn-secondary" id="btnRefreshGallery">🔄 Обновить</button>
+            <button class="flow-btn flow-btn-ghost" id="btnOpenInExplorer">📁 Открыть в проводнике</button>
+          </div>
+        </header>
+
+        <div class="media-split-layout">
+          <div class="media-gallery-col">
+            <div class="gallery-thumbs-grid" id="galleryGrid"></div>
+          </div>
+
+          <div class="media-inspector-col">
+            <div class="flow-card">
+              <div class="card-header-row">
+                <div class="card-label">
+                  <span class="label-dot accent-cyan"></span>
+                  <span>Медиа-стек (Версии объекта)</span>
+                </div>
+              </div>
+
+              <div class="version-ladder" id="versionFlowDisplay">
+                <div class="ladder-step active">
+                  <span class="ladder-badge">1</span>
+                  <div><strong>Исходник</strong><span id="vSrcLabel">Выберите файл</span></div>
+                </div>
+                <div class="ladder-step">
+                  <span class="ladder-badge">2</span>
+                  <div><strong>Вариация</strong><span id="vVarLabel">Сгенерировано</span></div>
+                </div>
+                <div class="ladder-step">
+                  <span class="ladder-badge">3</span>
+                  <div><strong>Апскейл</strong><span id="vUpscaleLabel">dGPU Enhanced</span></div>
+                </div>
+              </div>
+
+              <div class="sidecar-viewer-box">
+                <span class="viewer-title">📄 Метаданные (Sidecar JSON):</span>
+                <pre id="sidecarJsonContent">Выберите файл из галереи слева для просмотра параметров, промпта и сида.</pre>
+              </div>
+
+              <div class="inspector-buttons-bar" id="stackActionsBar" style="display:none;">
+                <button class="flow-btn flow-btn-accent glow-btn" id="btnReusePrompt">
+                  🚀 Вставить промпт во Flow
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
 
-  </main>
+      <!-- ======================================================== -->
+      <!-- TAB 5: HARDWARE & dGPU TELEMETRY -->
+      <!-- ======================================================== -->
+      <section class="flow-tab-pane" id="tab-gpu">
+        <header class="flow-view-header">
+          <div class="view-title-group">
+            <h2 class="view-title">🎮 Аппаратное ускорение и телеметрия</h2>
+            <span class="view-sub">WMI-детекция оборудования, разгрузка процессора и управление памятью</span>
+          </div>
 
-  <!-- OTA Update Modal Dialog (Windows 11 Fluent) -->
+          <div class="view-action-group">
+            <button class="flow-btn flow-btn-accent glow-btn" id="btnTrimMemoryNow">🧹 Очистить RAM процесса</button>
+            <button class="flow-btn flow-btn-secondary" id="btnReapplyGpuRegistry">⚙️ Реестр DirectX dGPU</button>
+          </div>
+        </header>
+
+        <div class="studio-scrollable-content">
+          <div class="telemetry-tiles-grid">
+
+            <!-- 1. Discrete GPU -->
+            <div class="flow-card telem-tile">
+              <div class="telem-icon">🎮</div>
+              <div class="telem-info">
+                <span class="telem-title">Дискретная видеокарта (dGPU)</span>
+                <strong class="telem-val accent-cyan" id="telemetryDgpuName">Дискретная видеокарта (dGPU)</strong>
+                <span class="telem-sub" id="telemetryDgpuSub">DirectX 11 / Direct3D • GpuPreference=2 (High Performance)</span>
+              </div>
+            </div>
+
+            <!-- 2. CPU -->
+            <div class="flow-card telem-tile">
+              <div class="telem-icon">💻</div>
+              <div class="telem-info">
+                <span class="telem-title">Центральный процессор (CPU)</span>
+                <strong class="telem-val accent-cyan" id="telemetryCpuName">Процессор хоста</strong>
+                <span class="telem-sub" id="telemetryCpuSub">Разгружен от видео-рендеринга благодаря Direct3D</span>
+              </div>
+            </div>
+
+            <!-- 3. RAM -->
+            <div class="flow-card telem-tile">
+              <div class="telem-icon">💾</div>
+              <div class="telem-info">
+                <span class="telem-title">Оперативная память (RAM)</span>
+                <strong class="telem-val accent-green" id="telemetryRamTotal">16.0 GB RAM</strong>
+                <span class="telem-sub" id="telemetryRamSub">Процесс Flow: ~28 MB • Zero-Memory SSD Streamer активен</span>
+              </div>
+            </div>
+
+            <!-- 4. Integrated Graphics -->
+            <div class="flow-card telem-tile">
+              <div class="telem-icon">🔋</div>
+              <div class="telem-info">
+                <span class="telem-title">Интегрированная графика (iGPU)</span>
+                <strong class="telem-val" id="telemetryIgpuName">Интегрированное видеоядро</strong>
+                <span class="telem-sub" id="telemetryIgpuSub">Фоновый режим • Освобождена от декодирования видео</span>
+              </div>
+            </div>
+
+            <!-- 5. Video Decoder -->
+            <div class="flow-card telem-tile">
+              <div class="telem-icon">⚡</div>
+              <div class="telem-info">
+                <span class="telem-title">Аппаратное декодирование видео</span>
+                <strong class="telem-val accent-cyan" id="telemetryDecoder">DirectX 11 / Direct3D Активен</strong>
+                <span class="telem-sub" id="telemetryDecoderSub">--force_high_performance_gpu --enable-accelerated-video-decode</span>
+              </div>
+            </div>
+
+            <!-- 6. Unlocker -->
+            <div class="flow-card telem-tile">
+              <div class="telem-icon">🔓</div>
+              <div class="telem-info">
+                <span class="telem-title">Разблокировка регионов (Google Labs)</span>
+                <strong class="telem-val accent-cyan" id="telemetryUnlocker">Closure Stream Hook v4.1 (Активен)</strong>
+                <span class="telem-sub" id="telemetryUnlockerSub">Автоматический патч RPC cPZSdc, tRPC и WIZ_global_data</span>
+              </div>
+            </div>
+
+            <!-- 7. OTA Updates -->
+            <div class="flow-card telem-tile">
+              <div class="telem-icon">🔄</div>
+              <div class="telem-info">
+                <span class="telem-title">Система OTA-обновлений (GitHub Live)</span>
+                <strong class="telem-val accent-green" id="telemetryUpdateStatus">Версия v1.0.0 (Актуальная)</strong>
+                <span class="telem-sub" id="telemetryUpdateSub">Репозиторий: RichkovGit/GoogleFlowDesktop</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+  </div>
+
+  <!-- OTA Update Modal Dialog (Windows 11 Fluent Dark) -->
   <div class="uwp-modal-backdrop" id="updateModalBackdrop" style="display:none;">
     <div class="uwp-modal-card">
       <div class="modal-header">
@@ -570,8 +655,8 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button class="uwp-btn uwp-btn-secondary" id="btnUpdateModalLater">Позже</button>
-        <button class="uwp-btn uwp-btn-accent" id="btnUpdateModalApply">🚀 Обновить и перезапустить</button>
+        <button class="flow-btn flow-btn-ghost" id="btnUpdateModalLater">Позже</button>
+        <button class="flow-btn flow-btn-accent glow-btn" id="btnUpdateModalApply">🚀 Обновить и перезапустить</button>
       </div>
     </div>
   </div>

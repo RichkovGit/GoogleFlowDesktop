@@ -22,8 +22,17 @@ namespace GoogleFlowDesktop
             catch { }
         }
 
+        private static DateTime lastToastTime = DateTime.MinValue;
+
         public static void ShowToast(string title, string message)
         {
+            lock (typeof(Notifier))
+            {
+                if ((DateTime.Now - lastToastTime).TotalSeconds < 2.5)
+                    return;
+                lastToastTime = DateTime.Now;
+            }
+
             ThreadPool.QueueUserWorkItem(state =>
             {
                 try

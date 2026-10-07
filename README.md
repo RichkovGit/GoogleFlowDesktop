@@ -6,7 +6,7 @@
 
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/RichkovGit/GoogleFlowDesktop)
 [![Architecture: C# .NET](https://img.shields.io/badge/Architecture-C%23%20%7C%20WinForms%20%2B%20Edge%20WebView2-512BD4?style=for-the-badge&logo=dotnet&logoColor=white)](https://github.com/RichkovGit/GoogleFlowDesktop)
-[![Acceleration: DirectX 11 / NVDEC](https://img.shields.io/badge/GPU%20Decoders-NVIDIA%20GTX%201650%20(dGPU)-76B900?style=for-the-badge&logo=nvidia&logoColor=white)](https://github.com/RichkovGit/GoogleFlowDesktop)
+[![Acceleration: DirectX 11 / Direct3D](https://img.shields.io/badge/GPU%20Decoders-DirectX%2011%20%7C%20dGPU%20(NVIDIA%20%7C%20AMD%20%7C%20Intel)-76B900?style=for-the-badge&logo=nvidia&logoColor=white)](https://github.com/RichkovGit/GoogleFlowDesktop)
 [![Bypass: Labs Country Unlocker v4.1](https://img.shields.io/badge/Bypass-Google%20Labs%20Unlocker%20v4.1-00D2FF?style=for-the-badge)](https://github.com/RichkovGit/GoogleFlowDesktop)
 [![OTA Updates: Live](https://img.shields.io/badge/OTA%20Updates-In--App%201--Click-34D399?style=for-the-badge)](https://github.com/RichkovGit/GoogleFlowDesktop)
 [![License: MIT](https://img.shields.io/badge/License-MIT-F59E0B?style=for-the-badge)](LICENSE)
@@ -26,7 +26,7 @@
 * **Решение:** 
   * Приложение автоматически прописывает политику высокой производительности в реестре Windows (`HKCU\Software\Microsoft\DirectX\UserGpuPreferences -> GpuPreference=2;`).
   * Флаги движка Chromium: `--force_high_performance_gpu --gpu-preference=2 --enable-features=VaapiVideoDecoder,D3D11VideoDecoder,PlatformHEVCDecoderSupport --enable-accelerated-video-decode`.
-  * Видеопотоки декодируются через выделенный блок **NVDEC** на видеокарте например NVIDIA GeForce GTX 1650, освобождая процессор для фоновых задач.
+  * Видеопотоки декодируются через выделенный блок аппаратного ускорения на дискретной видеокарте (dGPU: NVIDIA / AMD / Intel Arc), полностью освобождая центральный процессор.
 
 ### 2. 🔓 Встроенный обход геоблокировок (Google Labs Country Unlocker v4.1)
 * Не требуется установка Tampermonkey, расширений или VPN.
@@ -71,7 +71,7 @@
 
 ### 8. 📊 Живая телеметрия оборудования (WMI Telemetry)
 * Динамическое определение характеристик конкретной системы:
-  * Дискретный GPU и VRAM (например, `NVIDIA GeForce GTX 1650 4.0 GB VRAM`).
+  * Дискретный GPU и VRAM (динамическое определение любой NVIDIA GeForce / AMD Radeon / Intel Arc).
   * Модель CPU, физические ядра и логические потоки (например, `11th Gen Intel Core i5-11400H, 6C/12T`).
   * Интегрированное видеоядро и его разгрузка.
   * Общий и свободный объем системной памяти (RAM).
@@ -165,7 +165,7 @@ GoogleFlowDesktop/
 ## 💻 Системные требования
 
 * **ОС:** Windows 10 (1809+) или Windows 11 (x64)
-* **Видеокарта:** Дискретная видеокарта NVIDIA / AMD / Intel с поддержкой DirectX 11 (рекомендуется NVIDIA GeForce GTX 1650 или мощнее)
+* **Видеокарта:** Дискретная видеокарта (dGPU) NVIDIA / AMD / Intel с поддержкой DirectX 11 / Direct3D
 * **Процессор:** Intel Core i3 / AMD Ryzen 3 или лучше
 * **Оперативная память:** от 4 ГБ RAM (приложение потребляет всего ~50 МБ)
 * **Среда выполнения:** Microsoft Edge WebView2 Runtime (встроена в Windows 10/11 по умолчанию)

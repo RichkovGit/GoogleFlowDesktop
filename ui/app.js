@@ -1,5 +1,5 @@
 /**
- * Google Flow Desktop - Studio Frontend Logic (Windows 11 / UWP Fluent Edition)
+ * Google Flow Desktop - Studio Frontend Logic (Google Flow Obsidian Edition)
  */
 
 // Global State
@@ -119,7 +119,6 @@ const DEFAULT_NEGATIVE_PROMPT =
   "cluttered room, unwanted objects, bad anatomy, mutated fingers, low quality";
 
 document.addEventListener('DOMContentLoaded', () => {
-  setupViewModeSwitcher();
   setupNavigation();
   initChipsAndPresets();
   initAspectRatios();
@@ -133,48 +132,13 @@ document.addEventListener('DOMContentLoaded', () => {
   postHostMessage({ type: 'UI_READY' });
 });
 
-// View Mode Switcher (Split / Flow / Studio)
-function setupViewModeSwitcher() {
-  document.querySelectorAll('#viewModeSelector .segmented-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('#viewModeSelector .segmented-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const mode = btn.dataset.mode;
-      postHostMessage({ type: 'SET_VIEW_MODE', mode: mode });
-    });
-  });
-
-  document.getElementById('btnReloadFlow').addEventListener('click', () => {
-    postHostMessage({ type: 'RELOAD_FLOW' });
-    showMiniToast('Перезагрузка Google Flow...');
-  });
-
-  document.getElementById('btnFlowHome').addEventListener('click', () => {
-    postHostMessage({ type: 'NAVIGATE_FLOW', url: 'https://flow.google.com/' });
-  });
-
-  document.getElementById('btnFlowAbout').addEventListener('click', () => {
-    postHostMessage({ type: 'NAVIGATE_FLOW', url: 'https://flow.google.com/about' });
-  });
-
-  document.getElementById('btnSendToFlow').addEventListener('click', () => {
-    const finalPrompt = getCompiledPrompt();
-    postHostMessage({ type: 'SEND_TO_FLOW', prompt: finalPrompt });
-    showMiniToast('🚀 Промпт передан в Google Flow Canvas!');
-  });
-
-  document.getElementById('btnOpenFolder').addEventListener('click', () => {
-    postHostMessage({ type: 'OPEN_PROJECTS_FOLDER' });
-  });
-}
-
-// Navigation Tabs
+// Navigation (Google Flow Vertical Rail)
 function setupNavigation() {
-  document.querySelectorAll('.uwp-tab').forEach(btn => {
+  document.querySelectorAll('.flow-nav-item[data-tab], .uwp-tab[data-tab]').forEach(btn => {
     btn.addEventListener('click', () => {
       const tab = btn.dataset.tab;
-      document.querySelectorAll('.uwp-tab').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.flow-nav-item[data-tab], .uwp-tab[data-tab]').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.flow-tab-pane, .tab-pane').forEach(p => p.classList.remove('active'));
       
       btn.classList.add('active');
       const pane = document.getElementById(`tab-${tab}`);
@@ -182,6 +146,22 @@ function setupNavigation() {
       state.currentTab = tab;
     });
   });
+
+  // Tools in rail
+  const btnFolder = document.getElementById('btnOpenFolder');
+  if (btnFolder) {
+    btnFolder.addEventListener('click', () => {
+      postHostMessage({ type: 'OPEN_PROJECTS_FOLDER' });
+    });
+  }
+
+  const btnTrim = document.getElementById('btnTrimRamQuick');
+  if (btnTrim) {
+    btnTrim.addEventListener('click', () => {
+      postHostMessage({ type: 'TRIM_MEMORY' });
+      showMiniToast('🧹 Память процесса успешно очищена!');
+    });
+  }
 }
 
 // Chips & Presets
@@ -192,20 +172,23 @@ function initChipsAndPresets() {
   renderChipGroup('chipsVideoDynamics', DICTIONARIES.video_dynamics);
 
   const pGrid = document.getElementById('presetGrid');
-  pGrid.innerHTML = '';
-  PRESETS.forEach(p => {
-    const card = document.createElement('div');
-    card.className = 'preset-card-item';
-    card.id = `preset-${p.id}`;
-    card.innerHTML = `
-      <div class="preset-title">${p.name}</div>
-      <div class="preset-desc">${p.desc}</div>
-    `;
-    card.addEventListener('click', () => togglePreset(p));
-    pGrid.appendChild(card);
-  });
+  if (pGrid) {
+    pGrid.innerHTML = '';
+    PRESETS.forEach(p => {
+      const card = document.createElement('div');
+      card.className = 'preset-card-item';
+      card.id = `preset-${p.id}`;
+      card.innerHTML = `
+        <div class="preset-item-name">${p.name}</div>
+        <div class="preset-item-desc">${p.desc}</div>
+      `;
+      card.addEventListener('click', () => togglePreset(p));
+      pGrid.appendChild(card);
+    });
+  }
 
-  document.getElementById('negativePromptInput').value = DEFAULT_NEGATIVE_PROMPT;
+  const negIn = document.getElementById('negativePromptInput');
+  if (negIn) negIn.value = DEFAULT_NEGATIVE_PROMPT;
 }
 
 function renderChipGroup(containerId, list) {
@@ -214,7 +197,7 @@ function renderChipGroup(containerId, list) {
   container.innerHTML = '';
   list.forEach(item => {
     const chip = document.createElement('button');
-    chip.className = 'chip';
+    chip.className = 'chip-tag';
     chip.textContent = item.label;
     chip.dataset.val = item.val;
     chip.addEventListener('click', () => toggleChip(chip, item.val));
@@ -244,7 +227,7 @@ function toggleChip(chipEl, tagVal) {
 
 function togglePreset(preset) {
   const card = document.getElementById(`preset-${preset.id}`);
-  const isSelected = card.classList.contains('active');
+  const isSelected = card && card.classList.contains('active');
 
   document.querySelectorAll('.preset-card-item').forEach(c => c.classList.remove('active'));
 
@@ -252,7 +235,7 @@ function togglePreset(preset) {
     state.activePresetId = null;
     state.activePresetSuffix = '';
   } else {
-    card.classList.add('active');
+    if (card) card.classList.add('active');
     state.activePresetId = preset.id;
     state.activePresetSuffix = preset.suffix;
   }
@@ -261,9 +244,9 @@ function togglePreset(preset) {
 
 // Aspect Ratios
 function initAspectRatios() {
-  document.querySelectorAll('.ratio-chip').forEach(btn => {
+  document.querySelectorAll('.flow-ratio-pill, .ratio-chip').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.ratio-chip').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.flow-ratio-pill, .ratio-chip').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       state.selectedRatio = btn.dataset.ratio;
       updateCompiledPrompt();
@@ -274,31 +257,58 @@ function initAspectRatios() {
 // Form Inputs & Filters
 function initFormInputs() {
   const promptIn = document.getElementById('promptInput');
-  promptIn.addEventListener('input', updateCompiledPrompt);
+  if (promptIn) {
+    promptIn.addEventListener('input', () => {
+      updatePromptCharCount();
+      updateCompiledPrompt();
+    });
+    updatePromptCharCount();
+  }
 
-  document.getElementById('btnClearPrompt').addEventListener('click', () => {
-    promptIn.value = '';
-    document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-    document.querySelectorAll('.preset-card-item').forEach(c => c.classList.remove('active'));
-    state.activeChips.clear();
-    state.activePresetSuffix = '';
-    updateCompiledPrompt();
-  });
+  const btnClear = document.getElementById('btnClearPrompt');
+  if (btnClear) {
+    btnClear.addEventListener('click', () => {
+      if (promptIn) promptIn.value = '';
+      document.querySelectorAll('.chip-tag').forEach(c => c.classList.remove('active'));
+      document.querySelectorAll('.preset-card-item').forEach(c => c.classList.remove('active'));
+      state.activeChips.clear();
+      state.activePresetSuffix = '';
+      updatePromptCharCount();
+      updateCompiledPrompt();
+    });
+  }
 
-  document.getElementById('btnAiOptimize').addEventListener('click', () => {
-    let cur = promptIn.value.trim();
-    if (!cur) cur = 'Кинематографичная сцена в городе будущего';
-    const enrichments = [
-      "cinematic volumetric atmosphere, intricate photorealistic reflections",
-      "shot on 85mm prime lens f/1.4, creamy bokeh, hyper-detailed textures",
-      "golden hour natural sidelight, dramatic chiaroscuro shadows, Octane render 8k"
-    ];
-    const picked = enrichments[Math.floor(Math.random() * enrichments.length)];
-    promptIn.value = `${cur}, ${picked}`;
-    showMiniToast('✨ Промпт улучшен кинематографичными деталями!');
-    updateCompiledPrompt();
-  });
+  const btnCopyDirect = document.getElementById('btnCopyPromptDirect');
+  if (btnCopyDirect) {
+    btnCopyDirect.addEventListener('click', () => {
+      if (promptIn) {
+        navigator.clipboard.writeText(promptIn.value);
+        showMiniToast('📋 Базовый текст скопирован!');
+      }
+    });
+  }
 
+  // AI Prompt Optimizer
+  const btnAi = document.getElementById('btnAiOptimize');
+  if (btnAi) {
+    btnAi.addEventListener('click', () => {
+      let cur = promptIn.value.trim();
+      if (!cur) cur = 'Кинематографичная сцена в городе будущего';
+      const enrichments = [
+        "cinematic volumetric atmosphere, intricate photorealistic reflections, dramatic lighting",
+        "shot on 85mm prime lens f/1.4, creamy background bokeh, hyper-detailed textures, Octane 8k",
+        "golden hour natural sidelight, dramatic chiaroscuro shadows, award-winning cinematography",
+        "hyper-detailed, authentic ambiance, natural shadows, crisp focus, 8k resolution"
+      ];
+      const picked = enrichments[Math.floor(Math.random() * enrichments.length)];
+      promptIn.value = `${cur}, ${picked}`;
+      showMiniToast('🪄 Промпт улучшен с помощью ИИ!');
+      updatePromptCharCount();
+      updateCompiledPrompt();
+    });
+  }
+
+  // Filter Checkboxes
   ['chkRussianOnly', 'chkPhotoLikeness', 'chkZeroClutter', 'chkPromptWrapper', 'chkEnableNegative'].forEach(id => {
     const el = document.getElementById(id);
     if (el) {
@@ -309,29 +319,62 @@ function initFormInputs() {
     }
   });
 
-  document.getElementById('btnCopyCompiled').addEventListener('click', () => {
-    const text = getCompiledPrompt();
-    navigator.clipboard.writeText(text);
-    showMiniToast('📋 Скопировано в буфер!');
-  });
+  const btnCopyComp = document.getElementById('btnCopyCompiled');
+  if (btnCopyComp) {
+    btnCopyComp.addEventListener('click', () => {
+      const text = getCompiledPrompt();
+      navigator.clipboard.writeText(text);
+      showMiniToast('📋 Итоговый промпт скопирован!');
+    });
+  }
 
-  document.getElementById('btnGenerateNow').addEventListener('click', () => {
+  // Flow Injection Buttons
+  const sendFlowHandler = () => {
+    const text = getCompiledPrompt();
+    postHostMessage({ type: 'SEND_TO_FLOW', prompt: text });
+    showMiniToast('🚀 Промпт отправлен во Flow Canvas!');
+  };
+
+  const btnSendTop = document.getElementById('btnSendToFlow');
+  if (btnSendTop) btnSendTop.addEventListener('click', sendFlowHandler);
+
+  const btnSendBottom = document.getElementById('btnSendToFlowBottom');
+  if (btnSendBottom) btnSendBottom.addEventListener('click', sendFlowHandler);
+
+  // Queue Addition Buttons
+  const queueAddHandler = () => {
     triggerSingleGeneration();
-  });
+  };
+
+  const btnGenNow = document.getElementById('btnGenerateNow');
+  if (btnGenNow) btnGenNow.addEventListener('click', queueAddHandler);
+
+  const btnGenNowBottom = document.getElementById('btnGenerateNowBottom');
+  if (btnGenNowBottom) btnGenNowBottom.addEventListener('click', queueAddHandler);
+}
+
+function updatePromptCharCount() {
+  const pInput = document.getElementById('promptInput');
+  const countEl = document.getElementById('promptCharCount');
+  if (pInput && countEl) {
+    countEl.textContent = `${pInput.value.length} симв.`;
+  }
 }
 
 function getCompiledPrompt() {
-  const base = document.getElementById('promptInput').value.trim();
+  const baseEl = document.getElementById('promptInput');
+  const base = baseEl ? baseEl.value.trim() : '';
   let result = base;
 
   if (state.activePresetSuffix) {
     result += state.activePresetSuffix;
   }
 
-  const wrapperEnabled = document.getElementById('chkPromptWrapper').checked;
-  const russianOnly = document.getElementById('chkRussianOnly').checked;
-  const photoLikeness = document.getElementById('chkPhotoLikeness').checked;
-  const zeroClutter = document.getElementById('chkZeroClutter').checked;
+  const wrapperEl = document.getElementById('chkPromptWrapper');
+  const wrapperEnabled = wrapperEl ? wrapperEl.checked : true;
+  const russianOnly = document.getElementById('chkRussianOnly') ? document.getElementById('chkRussianOnly').checked : true;
+  const photoLikeness = document.getElementById('chkPhotoLikeness') ? document.getElementById('chkPhotoLikeness').checked : true;
+  const zeroClutter = document.getElementById('chkZeroClutter') ? document.getElementById('chkZeroClutter').checked : true;
 
   if (wrapperEnabled) {
     let rules = [];
@@ -355,9 +398,9 @@ function updateCompiledPrompt() {
 
 function triggerSingleGeneration() {
   const finalPrompt = getCompiledPrompt();
-  const negPrompt = document.getElementById('chkEnableNegative').checked 
-    ? document.getElementById('negativePromptInput').value.trim() 
-    : '';
+  const negEl = document.getElementById('chkEnableNegative');
+  const negInput = document.getElementById('negativePromptInput');
+  const negPrompt = (negEl && negEl.checked && negInput) ? negInput.value.trim() : '';
 
   const taskId = 'task_' + Math.random().toString(16).slice(2, 10);
   const seed = Math.floor(Math.random() * 4294967295);
@@ -377,71 +420,104 @@ function triggerSingleGeneration() {
   state.tasks[taskId] = task;
   renderQueue();
   postHostMessage({ type: 'ADD_SINGLE_TASK', task: task });
-  showMiniToast('⚡ Задача добавлена в очередь генерации!');
-  document.querySelector('.uwp-tab[data-tab="queue"]').click();
+  showMiniToast('⚡ Задача добавлена в очередь!');
+
+  const tabQueue = document.querySelector('.flow-nav-item[data-tab="queue"], .uwp-tab[data-tab="queue"]');
+  if (tabQueue) tabQueue.click();
 }
 
 // Batch Generators
 function initBatchGenerators() {
-  document.querySelectorAll('.sub-segmented .segmented-btn').forEach(btn => {
+  document.querySelectorAll('.flow-segmented-pills .sub-seg-btn, .sub-segmented .segmented-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.sub-segmented .segmented-btn').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.sub-pane').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.sub-seg-btn, .segmented-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.batch-sub-panel, .sub-pane').forEach(p => p.classList.remove('active'));
       btn.classList.add('active');
-      document.getElementById(`batch-sub-${btn.dataset.sub}`).classList.add('active');
+      const target = document.getElementById(`batch-sub-${btn.dataset.sub}`);
+      if (target) target.classList.add('active');
     });
   });
 
   let seedCount = 4;
   const countLabel = document.getElementById('seedCountLabel');
-  document.getElementById('btnSeedMinus').addEventListener('click', () => {
-    seedCount = Math.max(1, seedCount - 1);
-    countLabel.textContent = seedCount;
-  });
-  document.getElementById('btnSeedPlus').addEventListener('click', () => {
-    seedCount = Math.min(16, seedCount + 1);
-    countLabel.textContent = seedCount;
-  });
+  const btnMinus = document.getElementById('btnSeedMinus');
+  const btnPlus = document.getElementById('btnSeedPlus');
 
-  document.getElementById('btnLaunchMultiSeed').addEventListener('click', () => {
-    const prompt = document.getElementById('multiSeedPrompt').value.trim();
-    const mediaType = document.getElementById('multiSeedType').value;
-    postHostMessage({
-      type: 'LAUNCH_MULTI_SEED',
-      prompt: prompt,
-      count: seedCount,
-      media_type: mediaType,
-      aspect_ratio: state.selectedRatio,
-      negative_prompt: document.getElementById('negativePromptInput').value.trim()
+  if (btnMinus) {
+    btnMinus.addEventListener('click', () => {
+      seedCount = Math.max(1, seedCount - 1);
+      if (countLabel) countLabel.textContent = seedCount;
     });
-    showMiniToast(`🌱 Пакет из ${seedCount} задач отправлен в очередь!`);
-    document.querySelector('.uwp-tab[data-tab="queue"]').click();
-  });
+  }
+  if (btnPlus) {
+    btnPlus.addEventListener('click', () => {
+      seedCount = Math.min(16, seedCount + 1);
+      if (countLabel) countLabel.textContent = seedCount;
+    });
+  }
 
+  // Launch Multi-Seed
+  const btnLaunchMulti = document.getElementById('btnLaunchMultiSeed');
+  if (btnLaunchMulti) {
+    btnLaunchMulti.addEventListener('click', () => {
+      const prompt = document.getElementById('multiSeedPrompt').value.trim();
+      const mediaType = document.getElementById('multiSeedType').value;
+      const negInput = document.getElementById('negativePromptInput');
+      postHostMessage({
+        type: 'LAUNCH_MULTI_SEED',
+        prompt: prompt,
+        count: seedCount,
+        media_type: mediaType,
+        aspect_ratio: state.selectedRatio,
+        negative_prompt: negInput ? negInput.value.trim() : ''
+      });
+      showMiniToast(`🌱 Пакет из ${seedCount} задач отправлен в очередь!`);
+      const tabQueue = document.querySelector('.flow-nav-item[data-tab="queue"], .uwp-tab[data-tab="queue"]');
+      if (tabQueue) tabQueue.click();
+    });
+  }
+
+  const btnSendMultiFlow = document.getElementById('btnSendMultiSeedToFlow');
+  if (btnSendMultiFlow) {
+    btnSendMultiFlow.addEventListener('click', () => {
+      const prompt = document.getElementById('multiSeedPrompt').value.trim();
+      postHostMessage({ type: 'SEND_TO_FLOW', prompt: prompt });
+      showMiniToast('🚀 Промпт отправлен во Flow Canvas!');
+    });
+  }
+
+  // Cartesian Matrix
   const sList = document.getElementById('cartesianStylesList');
-  DICTIONARIES.art_styles.forEach(item => {
-    sList.innerHTML += `
-      <label class="cb-item">
-        <input type="checkbox" class="cb-cart-style" value="${item.val}" checked>
-        <span>${item.label}</span>
-      </label>
-    `;
-  });
+  if (sList) {
+    sList.innerHTML = '';
+    DICTIONARIES.art_styles.forEach(item => {
+      sList.innerHTML += `
+        <label class="cb-item">
+          <input type="checkbox" class="cb-cart-style" value="${item.val}" checked>
+          <span>${item.label}</span>
+        </label>
+      `;
+    });
+  }
 
   const lList = document.getElementById('cartesianLightsList');
-  DICTIONARIES.lighting.forEach(item => {
-    lList.innerHTML += `
-      <label class="cb-item">
-        <input type="checkbox" class="cb-cart-light" value="${item.val}" checked>
-        <span>${item.label}</span>
-      </label>
-    `;
-  });
+  if (lList) {
+    lList.innerHTML = '';
+    DICTIONARIES.lighting.forEach(item => {
+      lList.innerHTML += `
+        <label class="cb-item">
+          <input type="checkbox" class="cb-cart-light" value="${item.val}" checked>
+          <span>${item.label}</span>
+        </label>
+      `;
+    });
+  }
 
   function updateCartesianCount() {
     const sCount = document.querySelectorAll('.cb-cart-style:checked').length;
     const lCount = document.querySelectorAll('.cb-cart-light:checked').length;
-    document.getElementById('cartesianCountBadge').textContent = sCount * lCount;
+    const badge = document.getElementById('cartesianCountBadge');
+    if (badge) badge.textContent = sCount * lCount;
   }
 
   document.querySelectorAll('.cb-cart-style, .cb-cart-light').forEach(cb => {
@@ -449,88 +525,124 @@ function initBatchGenerators() {
   });
   updateCartesianCount();
 
-  document.getElementById('btnLaunchCartesian').addEventListener('click', () => {
-    const subject = document.getElementById('cartesianSubject').value.trim();
-    const styles = Array.from(document.querySelectorAll('.cb-cart-style:checked')).map(c => c.value);
-    const lights = Array.from(document.querySelectorAll('.cb-cart-light:checked')).map(c => c.value);
-    const totalCount = styles.length * lights.length;
-    if (totalCount === 0) {
-      alert('Пожалуйста, выберите хотя бы один стиль и одно освещение');
-      return;
-    }
+  const btnLaunchCart = document.getElementById('btnLaunchCartesian');
+  if (btnLaunchCart) {
+    btnLaunchCart.addEventListener('click', () => {
+      const subject = document.getElementById('cartesianSubject').value.trim();
+      const styles = Array.from(document.querySelectorAll('.cb-cart-style:checked')).map(c => c.value);
+      const lights = Array.from(document.querySelectorAll('.cb-cart-light:checked')).map(c => c.value);
+      const totalCount = styles.length * lights.length;
+      if (totalCount === 0) {
+        alert('Пожалуйста, выберите хотя бы один стиль и одно освещение');
+        return;
+      }
 
-    postHostMessage({
-      type: 'LAUNCH_CARTESIAN',
-      subject: subject,
-      styles: styles,
-      lights: lights,
-      aspect_ratio: state.selectedRatio,
-      negative_prompt: document.getElementById('negativePromptInput').value.trim()
+      const negInput = document.getElementById('negativePromptInput');
+      postHostMessage({
+        type: 'LAUNCH_CARTESIAN',
+        subject: subject,
+        styles: styles,
+        lights: lights,
+        aspect_ratio: state.selectedRatio,
+        negative_prompt: negInput ? negInput.value.trim() : ''
+      });
+      showMiniToast(`✖️ Матричный пакет из ${totalCount} задач отправлен в очередь!`);
+      const tabQueue = document.querySelector('.flow-nav-item[data-tab="queue"], .uwp-tab[data-tab="queue"]');
+      if (tabQueue) tabQueue.click();
     });
-    showMiniToast(`✖️ Матричный пакет из ${totalCount} задач отправлен в очередь!`);
-    document.querySelector('.uwp-tab[data-tab="queue"]').click();
-  });
-
-  const dropzone = document.getElementById('refDropzone');
-  const fileInput = document.getElementById('refFileInput');
-  dropzone.addEventListener('click', () => fileInput.click());
-
-  let selectedRefFiles = [];
-  fileInput.addEventListener('change', (e) => {
-    selectedRefFiles = Array.from(e.target.files);
-    renderRefFiles();
-  });
-
-  function renderRefFiles() {
-    const list = document.getElementById('refFilesList');
-    list.innerHTML = selectedRefFiles.map(f => `<span class="file-chip">📄 ${f.name}</span>`).join('');
   }
 
-  document.getElementById('btnLaunchRefMapper').addEventListener('click', () => {
-    const prompt = document.getElementById('refMapperPrompt').value.trim();
-    const paths = selectedRefFiles.map(f => f.name || f.path);
-    if (!paths.length) {
-      alert('Пожалуйста, выберите изображения-референсы');
-      return;
-    }
-    postHostMessage({
-      type: 'LAUNCH_REF_MAPPER',
-      prompt: prompt,
-      paths: paths,
-      aspect_ratio: state.selectedRatio,
-      negative_prompt: document.getElementById('negativePromptInput').value.trim()
+  const btnSendCartFlow = document.getElementById('btnSendCartesianToFlow');
+  if (btnSendCartFlow) {
+    btnSendCartFlow.addEventListener('click', () => {
+      const subject = document.getElementById('cartesianSubject').value.trim();
+      const styles = Array.from(document.querySelectorAll('.cb-cart-style:checked')).map(c => c.value);
+      const lights = Array.from(document.querySelectorAll('.cb-cart-light:checked')).map(c => c.value);
+      const p = `${subject}, ${styles[0] || ''}, ${lights[0] || ''}`.replace(/,\s*,/g, ',');
+      postHostMessage({ type: 'SEND_TO_FLOW', prompt: p });
+      showMiniToast('🚀 Первый матричный промпт отправлен во Flow Canvas!');
     });
-    showMiniToast(`🖼️ Reference пакет из ${paths.length} задач отправлен в очередь!`);
-    document.querySelector('.uwp-tab[data-tab="queue"]').click();
-  });
+  }
+
+  // Reference Mapper
+  const dropzone = document.getElementById('refDropzone');
+  const fileInput = document.getElementById('refFileInput');
+  if (dropzone && fileInput) {
+    dropzone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => {
+      selectedRefFiles = Array.from(e.target.files);
+      renderRefFiles();
+    });
+  }
+
+  let selectedRefFiles = [];
+  function renderRefFiles() {
+    const list = document.getElementById('refFilesList');
+    if (list) {
+      list.innerHTML = selectedRefFiles.map(f => `<span class="file-chip">📄 ${f.name}</span>`).join('');
+    }
+  }
+
+  const btnLaunchRef = document.getElementById('btnLaunchRefMapper');
+  if (btnLaunchRef) {
+    btnLaunchRef.addEventListener('click', () => {
+      const prompt = document.getElementById('refMapperPrompt').value.trim();
+      const paths = selectedRefFiles.map(f => f.name || f.path);
+      if (!paths.length) {
+        alert('Пожалуйста, выберите изображения-референсы');
+        return;
+      }
+      const negInput = document.getElementById('negativePromptInput');
+      postHostMessage({
+        type: 'LAUNCH_REF_MAPPER',
+        prompt: prompt,
+        paths: paths,
+        aspect_ratio: state.selectedRatio,
+        negative_prompt: negInput ? negInput.value.trim() : ''
+      });
+      showMiniToast(`🖼️ Reference пакет из ${paths.length} задач отправлен в очередь!`);
+      const tabQueue = document.querySelector('.flow-nav-item[data-tab="queue"], .uwp-tab[data-tab="queue"]');
+      if (tabQueue) tabQueue.click();
+    });
+  }
 }
 
 // Queue Controls
 function initQueueControls() {
-  document.getElementById('btnPauseQueue').addEventListener('click', (e) => {
-    const isPaused = e.target.textContent.includes('Возобновить');
-    if (isPaused) {
-      e.target.textContent = '⏸️ Пауза';
-      postHostMessage({ type: 'RESUME_QUEUE' });
-    } else {
-      e.target.textContent = '▶️ Возобновить';
-      postHostMessage({ type: 'PAUSE_QUEUE' });
-    }
-  });
-
-  document.getElementById('btnClearQueue').addEventListener('click', () => {
-    postHostMessage({ type: 'CLEAR_COMPLETED_TASKS' });
-    for (let tid in state.tasks) {
-      if (state.tasks[tid].status === 'completed' || state.tasks[tid].status === 'failed') {
-        delete state.tasks[tid];
+  const btnPause = document.getElementById('btnPauseQueue');
+  if (btnPause) {
+    btnPause.addEventListener('click', (e) => {
+      const isPaused = e.target.textContent.includes('Возобновить');
+      if (isPaused) {
+        e.target.textContent = '⏸️ Пауза';
+        postHostMessage({ type: 'RESUME_QUEUE' });
+        showMiniToast('▶️ Очередь возобновлена');
+      } else {
+        e.target.textContent = '▶️ Возобновить';
+        postHostMessage({ type: 'PAUSE_QUEUE' });
+        showMiniToast('⏸️ Очередь на паузе');
       }
-    }
-    renderQueue();
-  });
+    });
+  }
+
+  const btnClear = document.getElementById('btnClearQueue');
+  if (btnClear) {
+    btnClear.addEventListener('click', () => {
+      postHostMessage({ type: 'CLEAR_COMPLETED_TASKS' });
+      for (let tid in state.tasks) {
+        if (state.tasks[tid].status === 'completed' || state.tasks[tid].status === 'failed') {
+          delete state.tasks[tid];
+        }
+      }
+      renderQueue();
+      showMiniToast('🧹 Завершенные задачи очищены');
+    });
+  }
 }
 
 function renderQueue() {
   const grid = document.getElementById('queueGrid');
+  if (!grid) return;
   const taskIds = Object.keys(state.tasks);
 
   const badge = document.getElementById('queueCountBadge');
@@ -555,10 +667,10 @@ function renderQueue() {
 
   if (taskIds.length === 0) {
     grid.innerHTML = `
-      <div class="uwp-empty" id="queueEmptyState">
-        <span>📋</span>
+      <div class="queue-empty-state" id="queueEmptyState">
+        <span class="empty-icon">📋</span>
         <h4>Очередь задач пуста</h4>
-        <p>Сформируйте промпт в Студии или запустите Пакетный генератор</p>
+        <p>Создайте промпт в Студии или запустите Пакетный генератор для начала рендера</p>
       </div>
     `;
     return;
@@ -585,21 +697,36 @@ function renderQueue() {
     }
     card.className = `task-card ${task.status}`;
 
+    const isDone = task.status === 'completed';
+    const isGenerating = task.status === 'generating';
+    const progress = task.progress !== undefined ? task.progress : (isDone ? 100 : 0);
+
     card.innerHTML = `
       <div class="tc-header">
         <span class="tc-id">${tid}</span>
-        <span class="tc-status-tag status-${task.status}">${statusLabels[task.status] || task.status}</span>
+        <span class="tc-status-tag status-${task.status}">
+          ${isGenerating ? '⚡ ' : (isDone ? '✅ ' : '')}${statusLabels[task.status] || task.status}
+        </span>
       </div>
       <div class="tc-prompt" title="${escapeHtml(task.prompt)}">${escapeHtml(task.prompt)}</div>
-      <div class="tc-meta" style="display:flex;gap:8px;font-size:9px;color:#64748b;">
-        <span>🎲 Seed: ${task.seed !== undefined ? task.seed : 'auto'}</span>
+      <div class="tc-meta">
+        <span>🎲 Seed: #${task.seed !== undefined ? task.seed : 'auto'}</span>
         <span>📐 ${task.aspect_ratio || '16:9'}</span>
         <span>${task.media_type === 'video' ? '🎬 Видео' : '🖼️ Картинка'}</span>
       </div>
       <div class="progress-track">
-        <div class="progress-fill" style="width: ${task.progress || 0}%;"></div>
+        <div class="progress-fill" style="width: ${progress}%;"></div>
       </div>
-      ${task.status === 'failed' ? `<button class="uwp-btn uwp-btn-secondary" style="padding:2px 8px;font-size:10px;" onclick="retryTask('${tid}')">🔄 Повторить</button>` : ''}
+      <div class="tc-actions-bar">
+        <button class="tc-btn tc-btn-flow" onclick="sendTaskPromptToFlow('${tid}')" title="Вставить этот промпт в Google Flow Canvas">
+          🚀 Во Flow Canvas
+        </button>
+        <button class="tc-btn tc-btn-ghost" onclick="copyTaskPrompt('${tid}')" title="Скопировать промпт в буфер">
+          📋 Копировать
+        </button>
+        ${isDone ? `<button class="tc-btn tc-btn-ghost" onclick="viewTaskResult('${tid}')">👁️ Просмотр</button>` : ''}
+        ${task.status === 'failed' ? `<button class="tc-btn tc-btn-ghost" onclick="retryTask('${tid}')">🔄 Повторить</button>` : ''}
+      </div>
     `;
   });
 }
@@ -609,48 +736,78 @@ function escapeHtml(str) {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function retryTask(tid) {
+window.sendTaskPromptToFlow = function(tid) {
+  const task = state.tasks[tid];
+  if (task && task.prompt) {
+    postHostMessage({ type: 'SEND_TO_FLOW', prompt: task.prompt });
+    showMiniToast('🚀 Промпт задачи отправлен в Google Flow Canvas!');
+  }
+};
+
+window.copyTaskPrompt = function(tid) {
+  const task = state.tasks[tid];
+  if (task && task.prompt) {
+    navigator.clipboard.writeText(task.prompt);
+    showMiniToast('📋 Промпт скопирован в буфер!');
+  }
+};
+
+window.viewTaskResult = function(tid) {
+  postHostMessage({ type: 'REFRESH_GALLERY' });
+  const tabMedia = document.querySelector('.flow-nav-item[data-tab="media"], .uwp-tab[data-tab="media"]');
+  if (tabMedia) tabMedia.click();
+};
+
+window.retryTask = function(tid) {
   postHostMessage({ type: 'RETRY_TASK', task_id: tid });
-}
+  showMiniToast('🔄 Перезапуск задачи...');
+};
 
 // Media Stack
 function initMediaStack() {
-  document.getElementById('btnRefreshGallery').addEventListener('click', () => {
-    postHostMessage({ type: 'REFRESH_GALLERY' });
-  });
+  const btnRef = document.getElementById('btnRefreshGallery');
+  if (btnRef) btnRef.addEventListener('click', () => postHostMessage({ type: 'REFRESH_GALLERY' }));
 
-  document.getElementById('btnReusePrompt').addEventListener('click', () => {
-    if (state.selectedGalleryItem && state.selectedGalleryItem.metadata) {
-      const p = state.selectedGalleryItem.metadata.prompt;
-      if (p) {
-        document.getElementById('promptInput').value = p;
-        document.querySelector('.uwp-tab[data-tab="studio"]').click();
-        updateCompiledPrompt();
-        showMiniToast('Промпт загружен в Студию!');
+  const btnExp = document.getElementById('btnOpenInExplorer');
+  if (btnExp) btnExp.addEventListener('click', () => postHostMessage({ type: 'OPEN_PROJECTS_FOLDER' }));
+
+  const btnReuse = document.getElementById('btnReusePrompt');
+  if (btnReuse) {
+    btnReuse.addEventListener('click', () => {
+      if (state.selectedGalleryItem && state.selectedGalleryItem.metadata) {
+        const p = state.selectedGalleryItem.metadata.prompt;
+        if (p) {
+          postHostMessage({ type: 'SEND_TO_FLOW', prompt: p });
+          showMiniToast('🚀 Промпт из истории отправлен во Flow Canvas!');
+        }
       }
-    }
-  });
+    });
+  }
 
-  document.getElementById('btnOpenInExplorer').addEventListener('click', () => {
-    postHostMessage({ type: 'OPEN_PROJECTS_FOLDER' });
-  });
+  const btnTrim = document.getElementById('btnTrimMemoryNow');
+  if (btnTrim) {
+    btnTrim.addEventListener('click', () => {
+      postHostMessage({ type: 'TRIM_MEMORY' });
+      showMiniToast('🧹 Память dGPU процесса очищена!');
+    });
+  }
 
-  document.getElementById('btnTrimMemoryNow').addEventListener('click', () => {
-    postHostMessage({ type: 'TRIM_MEMORY' });
-    showMiniToast('🧹 Оперативная память очищена!');
-  });
-
-  document.getElementById('btnReapplyGpuRegistry').addEventListener('click', () => {
-    postHostMessage({ type: 'REAPPLY_GPU' });
-    showMiniToast('⚙️ Реестр dGPU обновлен!');
-  });
+  const btnReapply = document.getElementById('btnReapplyGpuRegistry');
+  if (btnReapply) {
+    btnReapply.addEventListener('click', () => {
+      postHostMessage({ type: 'REAPPLY_GPU' });
+      showMiniToast('⚙️ Реестр dGPU DirectX обновлен!');
+    });
+  }
 }
 
 function renderGallery(items) {
   state.galleryItems = items || [];
   const gGrid = document.getElementById('galleryGrid');
+  if (!gGrid) return;
+
   if (!items || items.length === 0) {
-    gGrid.innerHTML = '<p class="subtext" style="grid-column: 1/-1;">Папка проектов пуста. Запустите генерацию для создания медиа.</p>';
+    gGrid.innerHTML = '<p class="card-hint" style="grid-column: 1/-1; padding: 20px;">Папка проектов пуста. Запустите генерацию для создания медиа.</p>';
     return;
   }
 
@@ -662,7 +819,7 @@ function renderGallery(items) {
       <img src="${item.media_url}" alt="Preview" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22140%22><rect width=%22100%%22 height=%22100%%22 fill=%22%23181b24%22/><text x=%2250%%22 y=%2250%%22 fill=%22%2300d2ff%22 text-anchor=%22middle%22 dy=%22.3em%22>Media</text></svg>'">
       <div class="gallery-info">
         <div class="gallery-info-title">${item.filename}</div>
-        <div class="gallery-info-sub">Seed: ${item.metadata ? item.metadata.seed : 'N/A'}</div>
+        <div class="gallery-info-sub">Seed: #${item.metadata ? item.metadata.seed : 'N/A'}</div>
       </div>
     `;
     card.addEventListener('click', () => selectGalleryItem(item));
@@ -672,17 +829,24 @@ function renderGallery(items) {
 
 function selectGalleryItem(item) {
   state.selectedGalleryItem = item;
-  document.getElementById('sidecarJsonContent').textContent = JSON.stringify(item.metadata || {}, null, 2);
-  document.getElementById('stackActionsBar').style.display = 'flex';
+  const jsonContent = document.getElementById('sidecarJsonContent');
+  if (jsonContent) {
+    jsonContent.textContent = JSON.stringify(item.metadata || {}, null, 2);
+  }
+  const actBar = document.getElementById('stackActionsBar');
+  if (actBar) actBar.style.display = 'flex';
 
   if (item.metadata) {
-    document.getElementById('vSrcLabel').textContent = item.filename;
-    document.getElementById('vVarLabel').textContent = `Seed #${item.metadata.seed}`;
-    document.getElementById('vUpscaleLabel').textContent = `${item.metadata.aspect_ratio || '16:9'} Active`;
+    const srcL = document.getElementById('vSrcLabel');
+    const varL = document.getElementById('vVarLabel');
+    const upL = document.getElementById('vUpscaleLabel');
+    if (srcL) srcL.textContent = item.filename;
+    if (varL) varL.textContent = `Seed #${item.metadata.seed}`;
+    if (upL) upL.textContent = `${item.metadata.aspect_ratio || '16:9'} Active`;
   }
 }
 
-// Mini Toast Notification in UI
+// Mini Toast Notification
 function showMiniToast(msg) {
   let toast = document.getElementById('uiMiniToast');
   if (!toast) {
@@ -690,9 +854,9 @@ function showMiniToast(msg) {
     toast.id = 'uiMiniToast';
     toast.style.cssText = `
       position: fixed; bottom: 18px; right: 18px;
-      background: #1e293b; color: #38bdf8; border: 1px solid #0284c7;
-      padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 600;
-      box-shadow: 0 4px 14px rgba(0,0,0,0.4); z-index: 9999;
+      background: #171822; color: #38bdf8; border: 1px solid #00d2ff;
+      padding: 8px 16px; border-radius: 20px; font-size: 11px; font-weight: 700;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.6); z-index: 99999;
       transition: all 0.25s ease; opacity: 0; transform: translateY(8px);
     `;
     document.body.appendChild(toast);
@@ -729,12 +893,6 @@ window.onTaskAdded = function(task) {
     progress: task.progress || 0
   };
   renderQueue();
-};
-
-window.onViewModeChanged = function(mode) {
-  document.querySelectorAll('#viewModeSelector .segmented-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.mode === mode);
-  });
 };
 
 window.onBatchStarted = function(batch_id, total) {
@@ -779,26 +937,14 @@ window.onTelemetryUpdate = function(data) {
   }
   if (!data) return;
 
-  // Header quick pills
-  if (data.dgpu_name) {
-    const vramStr = data.dgpu_vram ? ` (${data.dgpu_vram})` : '';
-    const hGpu = document.getElementById('gpuNameDisplay');
-    if (hGpu) hGpu.textContent = `${data.dgpu_name}${vramStr}`;
-  }
-  if (data.app_ram_mb !== undefined) {
-    const hRam = document.getElementById('ramUsageDisplay');
-    if (hRam) hRam.textContent = `~${data.app_ram_mb} MB`;
-  }
+  const dgpuName = data.dgpu_name || 'Дискретная видеокарта (dGPU)';
 
-  // GPU Tab detailed specs
-  if (data.dgpu_name) {
-    const tGpu = document.getElementById('telemetryDgpuName');
-    if (tGpu) tGpu.textContent = `${data.dgpu_name} (${data.dgpu_vram || 'dGPU'})`;
-    const tGpuSub = document.getElementById('telemetryDgpuSub');
-    if (tGpuSub) {
-      const driverStr = data.dgpu_driver ? ` • Драйвер: ${data.dgpu_driver}` : '';
-      tGpuSub.textContent = `DirectX 11 / NVDEC${driverStr} • GpuPreference=2 (High Performance)`;
-    }
+  const tGpu = document.getElementById('telemetryDgpuName');
+  if (tGpu) tGpu.textContent = `${dgpuName} (${data.dgpu_vram || 'dGPU'})`;
+  const tGpuSub = document.getElementById('telemetryDgpuSub');
+  if (tGpuSub) {
+    const driverStr = data.dgpu_driver ? ` • Драйвер: ${data.dgpu_driver}` : '';
+    tGpuSub.textContent = `DirectX 11 / Direct3D${driverStr} • GpuPreference=2 (High Performance)`;
   }
 
   if (data.cpu_name) {
@@ -807,7 +953,7 @@ window.onTelemetryUpdate = function(data) {
     const tCpuSub = document.getElementById('telemetryCpuSub');
     if (tCpuSub) {
       const threads = data.cpu_threads || (data.cpu_cores ? data.cpu_cores * 2 : 12);
-      tCpuSub.textContent = `${data.cpu_cores || 6} ядер, ${threads} потоков • Разгружен от декодирования видео Flow`;
+      tCpuSub.textContent = `${data.cpu_cores || 6} ядер, ${threads} потоков • Разгружен от декодирования видео`;
     }
   }
 
@@ -842,14 +988,6 @@ function initUpdateControls() {
     });
   }
 
-  const btnManual = document.getElementById('btnCheckUpdateManual');
-  if (btnManual) {
-    btnManual.addEventListener('click', () => {
-      showMiniToast('🔍 Проверка обновлений на GitHub...');
-      postHostMessage({ type: 'CHECK_UPDATES' });
-    });
-  }
-
   const btnClose = document.getElementById('btnUpdateModalClose');
   const btnLater = document.getElementById('btnUpdateModalLater');
   const backdrop = document.getElementById('updateModalBackdrop');
@@ -864,7 +1002,8 @@ function initUpdateControls() {
         alert('Ссылка для загрузки обновления не найдена');
         return;
       }
-      document.getElementById('updateProgressBox').style.display = 'flex';
+      const pBox = document.getElementById('updateProgressBox');
+      if (pBox) pBox.style.display = 'flex';
       btnApply.disabled = true;
       btnApply.textContent = '⏳ Загрузка обновления...';
       postHostMessage({ type: 'INSTALL_UPDATE', download_url: pendingUpdateInfo.DownloadUrl });
@@ -872,72 +1011,55 @@ function initUpdateControls() {
   }
 }
 
+window.onUpdateAvailable = function(info) {
+  showUpdateModal(info);
+};
+
+window.onUpdateCheckResult = function(info) {
+  if (info && info.HasUpdate) {
+    showUpdateModal(info);
+  } else {
+    showMiniToast('✅ У вас установлена самая последняя версия!');
+  }
+};
+
+window.onUpdateDownloadProgress = function(pct) {
+  const fill = document.getElementById('updateProgressFill');
+  const pctLabel = document.getElementById('updateProgressPercent');
+  if (fill) fill.style.width = pct + '%';
+  if (pctLabel) pctLabel.textContent = pct + '%';
+};
+
 function showUpdateModal(info) {
   pendingUpdateInfo = info;
   const backdrop = document.getElementById('updateModalBackdrop');
   if (!backdrop) return;
 
-  document.getElementById('modalCurVer').textContent = `v${info.CurrentVersion || '1.0.0'}`;
-  document.getElementById('modalNewVer').textContent = `v${info.LatestVersion || '1.0.0'}`;
-  document.getElementById('modalRelDate').textContent = info.ReleaseDate || '2026-10-07';
+  const curVer = document.getElementById('modalCurVer');
+  const newVer = document.getElementById('modalNewVer');
+  const relDate = document.getElementById('modalRelDate');
+  if (curVer) curVer.textContent = `v${info.CurrentVersion || '1.0.0'}`;
+  if (newVer) newVer.textContent = `v${info.LatestVersion || '1.0.0'}`;
+  if (relDate) relDate.textContent = info.ReleaseDate || '2026-10-07';
 
   const list = document.getElementById('modalChangelogList');
-  list.innerHTML = '';
-  if (info.ReleaseNotes && info.ReleaseNotes.length) {
-    info.ReleaseNotes.forEach(note => {
-      const li = document.createElement('li');
-      li.textContent = note;
-      list.appendChild(li);
-    });
-  } else {
-    list.innerHTML = '<li>🚀 Улучшена производительность и стабильность работы.</li>';
+  if (list) {
+    list.innerHTML = '';
+    if (info.ReleaseNotes && info.ReleaseNotes.length) {
+      info.ReleaseNotes.forEach(note => {
+        const li = document.createElement('li');
+        li.textContent = note;
+        list.appendChild(li);
+      });
+    } else {
+      list.innerHTML = '<li>🚀 Улучшена производительность и стабильность работы.</li>';
+    }
   }
 
-  document.getElementById('updateProgressBox').style.display = 'none';
+  backdrop.style.display = 'flex';
   const btnApply = document.getElementById('btnUpdateModalApply');
   if (btnApply) {
     btnApply.disabled = false;
     btnApply.textContent = '🚀 Обновить и перезапустить';
   }
-
-  backdrop.style.display = 'flex';
 }
-
-window.onUpdateCheckResult = function(info) {
-  if (typeof info === 'string') {
-    try { info = JSON.parse(info); } catch(e) {}
-  }
-  if (!info) return;
-
-  if (info.HasUpdate) {
-    showUpdateModal(info);
-    const btn = document.getElementById('btnCheckUpdateHeader');
-    if (btn) {
-      btn.innerHTML = `<span>🚀 v${info.LatestVersion}</span>`;
-      btn.style.borderColor = '#00d2ff';
-      btn.style.boxShadow = '0 0 12px rgba(0,210,255,0.5)';
-    }
-    const stat = document.getElementById('telemetryUpdateStatus');
-    if (stat) stat.textContent = `Доступно обновление v${info.LatestVersion}`;
-  } else {
-    showMiniToast(`✨ У вас актуальная версия (${info.CurrentVersion || '1.0.0'})!`);
-    const stat = document.getElementById('telemetryUpdateStatus');
-    if (stat) stat.textContent = `Версия v${info.CurrentVersion || '1.0.0'} (Актуальная)`;
-  }
-};
-
-window.onUpdateAvailable = function(info) {
-  if (typeof info === 'string') {
-    try { info = JSON.parse(info); } catch(e) {}
-  }
-  if (!info) return;
-  showUpdateModal(info);
-};
-
-window.onUpdateDownloadProgress = function(percent) {
-  const fill = document.getElementById('updateProgressFill');
-  const txt = document.getElementById('updateProgressPercent');
-  if (fill) fill.style.width = percent + '%';
-  if (txt) txt.textContent = percent + '%';
-};
-

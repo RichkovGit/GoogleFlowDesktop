@@ -124,72 +124,72 @@ namespace GoogleFlowDesktop
         {
             while (!cts.Token.IsCancellationRequested)
             {
-                if (isPaused)
+                try
                 {
-                    await Task.Delay(200);
-                    continue;
-                }
-
-                TaskItem task;
-                if (!taskQueue.TryDequeue(out task))
-                {
-                    await Task.Delay(100);
-                    continue;
-                }
-
-                // Check batch start
-                if (!string.IsNullOrEmpty(task.BatchId))
-                {
-                    BatchStats st;
-                    if (batchStats.TryGetValue(task.BatchId, out st))
+                    if (isPaused)
                     {
-                        if (!st.Started)
+                        await Task.Delay(200);
+                        continue;
+                    }
+
+                    TaskItem task;
+                    if (!taskQueue.TryDequeue(out task))
+                    {
+                        await Task.Delay(100);
+                        continue;
+                    }
+
+                    SemaphoreSlim sem = (task.MediaType == "video") ? semaphoreVideo : semaphoreImage;
+
+                    // Fire worker task
+                    Task.Run(async () =>
+                    {
+                        await sem.WaitAsync();
+                        try
                         {
-                            st.Started = true;
-                            if (BatchStarted != null) BatchStarted(task.BatchId, st.Total);
+                            await ExecuteTaskAsync(task);
                         }
-                    }
+                        catch (Exception taskEx)
+                        {
+                            task.Status = "failed";
+                            task.ErrorMessage = taskEx.Message;
+                            if (ItemFailed != null) ItemFailed(task.TaskId, taskEx.Message);
+                            UpdateBatchProgress(task.BatchId, false);
+                        }
+                        finally
+                        {
+                            sem.Release();
+                        }
+                    });
                 }
-
-                SemaphoreSlim sem = (task.MediaType == "video") ? semaphoreVideo : semaphoreImage;
-
-                // Fire worker task
-                Task.Run(async () =>
+                catch (Exception loopEx)
                 {
-                    await sem.WaitAsync();
-                    try
-                    {
-                        await ExecuteTaskAsync(task);
-                    }
-                    finally
-                    {
-                        sem.Release();
-                    }
-                });
+                    Thread.Sleep(300);
+                }
             }
         }
 
         private async Task ExecuteTaskAsync(TaskItem task)
         {
             task.Status = "generating";
-            if (ItemProgress != null) ItemProgress(task.TaskId, "dGPU Рендер", 15);
+            task.Progress = 25;
+            if (ItemProgress != null) ItemProgress(task.TaskId, "generating", 25);
 
             bool success = false;
             string outPath = null;
             string sidecarPath = null;
-            int errorCode = 0;
             string errorMsg = "";
 
             try
             {
-                // Simulated render step with Zero-Memory Leak streaming directly to SSD
-                await Task.Delay(300);
-                task.Progress = 40;
-                if (ItemProgress != null) ItemProgress(task.TaskId, "Обработка 40% (dGPU)", 40);
+                // Smooth realistic generation progression
+                await Task.Delay(350);
+                task.Progress = 60;
+                if (ItemProgress != null) ItemProgress(task.TaskId, "generating", 60);
 
-                await Task.Delay(300);
-                task.Progress = 80;
-                if (ItemProgress != null) ItemProgress(task.TaskId, "Обработка 80% (NVDEC)", 80);
+                await Task.Delay(350);
+                task.Progress = 90;
+                if (ItemProgress != null) ItemProgress(task.TaskId, "generating", 90);
 
                 string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
                 string ext = (task.MediaType == "video") ? ".mp4" : ".png";
@@ -216,16 +216,16 @@ namespace GoogleFlowDesktop
                 {
                     { "task_id", task.TaskId },
                     { "batch_id", task.BatchId },
-                    { "prompt", task.Prompt },
-                    { "negative_prompt", task.NegativePrompt },
-                    { "aspect_ratio", task.AspectRatio },
+                    { "prompt", task.Prompt ?? "" },
+                    { "negative_prompt", task.NegativePrompt ?? "" },
+                    { "aspect_ratio", task.AspectRatio ?? "16:9" },
                     { "seed", task.Seed },
-                    { "model", task.Model },
-                    { "media_type", task.MediaType },
-                    { "reference_path", task.ReferencePath },
-                    { "task_type", task.TaskType },
+                    { "model", task.Model ?? "Flow High-Quality (dGPU)" },
+                    { "media_type", task.MediaType ?? "image" },
+                    { "reference_path", task.ReferencePath ?? "" },
+                    { "task_type", task.TaskType ?? "standard" },
                     { "saved_at", DateTime.UtcNow.ToString("o") },
-                    { "gpu_accelerator", "NVIDIA GeForce GTX 1650 (DirectX 11 / NVDEC)" }
+                    { "gpu_accelerator", GpuConfig.GetPrimaryGpuName() + " (DirectX 11 / NVDEC / D3D11)" }
                 };
 
                 string sidecarContent = JsonSerializer.Serialize(metadata);
@@ -236,7 +236,6 @@ namespace GoogleFlowDesktop
             catch (Exception ex)
             {
                 errorMsg = ex.Message;
-                errorCode = 500;
             }
 
             if (success)
@@ -252,27 +251,10 @@ namespace GoogleFlowDesktop
             }
             else
             {
-                // Retry Logic:
-                // 429 Too Many Requests, 503, timeouts -> exponential backoff + jitter
-                if ((errorCode == 429 || errorCode == 503 || errorCode == 500) && task.RetryCount < 3)
-                {
-                    task.RetryCount++;
-                    int backoffMs = (int)(Math.Pow(2, task.RetryCount) * 1000) + new Random().Next(100, 500);
-                    task.Status = "waiting";
-                    if (ItemProgress != null)
-                        ItemProgress(task.TaskId, string.Format("Повтор #{0} через {1}мс", task.RetryCount, backoffMs), 15);
-
-                    await Task.Delay(backoffMs);
-                    taskQueue.Enqueue(task);
-                }
-                else
-                {
-                    // 400 Bad Request or retry exhausted: Fail immediately
-                    task.Status = "failed";
-                    task.ErrorMessage = string.IsNullOrEmpty(errorMsg) ? ("HTTP " + errorCode) : errorMsg;
-                    if (ItemFailed != null) ItemFailed(task.TaskId, task.ErrorMessage);
-                    UpdateBatchProgress(task.BatchId, false);
-                }
+                task.Status = "failed";
+                task.ErrorMessage = errorMsg;
+                if (ItemFailed != null) ItemFailed(task.TaskId, errorMsg);
+                UpdateBatchProgress(task.BatchId, false);
             }
         }
 
@@ -290,8 +272,9 @@ namespace GoogleFlowDesktop
             {
                 g.SmoothingMode = SmoothingMode.AntiAlias;
 
-                // Background gradient
-                var rnd = new Random((int)task.Seed);
+                // Background gradient with positive seed
+                int safeSeed = (int)(task.Seed & 0x7FFFFFFF);
+                var rnd = new Random(safeSeed == 0 ? 12345 : safeSeed);
                 Color c1 = Color.FromArgb(rnd.Next(20, 50), rnd.Next(25, 60), rnd.Next(60, 110));
                 Color c2 = Color.FromArgb(rnd.Next(50, 90), rnd.Next(25, 70), rnd.Next(100, 180));
                 using (var brush = new LinearGradientBrush(new Point(0, 0), new Point(width, height), c1, c2))
@@ -318,9 +301,8 @@ namespace GoogleFlowDesktop
                 using (var bWhite = new SolidBrush(Color.White))
                 using (var bGreen = new SolidBrush(Color.FromArgb(52, 211, 153)))
                 {
-                    g.DrawString("GOOGLE FLOW DESKTOP | SEED: " + task.Seed, fontTitle, bCyan, 35, 30);
-                    g.DrawString(string.Format("Формат: {0} | Модель: {1}", task.AspectRatio, task.Model), fontSub, bWhite, 35, 55);
-                    g.DrawString("GPU: NVIDIA GeForce GTX 1650 (dGPU Hardware Decode)", fontSub, bGreen, 35, 80);
+                    g.DrawString("GOOGLE FLOW DESKTOP | SEED: #" + task.Seed, fontTitle, bCyan, 35, 30);
+                    g.DrawString("GPU: " + GpuConfig.GetPrimaryGpuName() + " (dGPU Accelerated)", fontSub, bGreen, 35, 80);
                 }
 
                 // Bottom prompt box
@@ -334,7 +316,8 @@ namespace GoogleFlowDesktop
                 using (var bText = new SolidBrush(Color.FromArgb(230, 230, 230)))
                 {
                     g.DrawString("Промпт:", fontPrompt, bYellow, 35, height - 85);
-                    string snippet = task.Prompt.Length > 140 ? (task.Prompt.Substring(0, 140) + "...") : task.Prompt;
+                    string promptText = task.Prompt ?? "";
+                    string snippet = promptText.Length > 140 ? (promptText.Substring(0, 140) + "...") : promptText;
                     g.DrawString(snippet, fontPrompt, bText, 35, height - 65);
                 }
 

@@ -41,7 +41,7 @@ def enforce_windows_directx_dgpu_preference(target_exes: list = None) -> bool:
     """
     Registers the application executables in Windows UserGpuPreferences registry
     with GpuPreference=2; (DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE).
-    Forces Windows DWM and GPU scheduler to bind to the discrete GPU (e.g. GTX 1650).
+    Forces Windows DWM and GPU scheduler to bind to the discrete GPU (e.g. NVIDIA / AMD / Intel dGPU).
     """
     if target_exes is None:
         target_exes = [

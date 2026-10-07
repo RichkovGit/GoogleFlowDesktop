@@ -195,7 +195,7 @@ class WorkerDispatcher:
             "task_type": task.task_type,
             "created_at": task.created_at,
             "saved_at": time.time(),
-            "gpu_accelerator": "NVIDIA GeForce GTX 1650 (DirectX 11 / NVDEC)"
+            "gpu_accelerator": "Discrete GPU (DirectX 11 / NVDEC / D3D11)"
         }
 
         with open(target_sidecar_path, "w", encoding="utf-8") as f:
@@ -232,7 +232,7 @@ class WorkerDispatcher:
         draw.rectangle([20, 20, width - 20, 110], fill=(10, 15, 25))
         draw.text((35, 30), f"GOOGLE FLOW DESKTOP | SEED: {task.seed}", fill=(0, 210, 255))
         draw.text((35, 55), f"Формат: {task.aspect_ratio} | Модель: {task.model}", fill=(200, 200, 220))
-        draw.text((35, 80), f"GPU: NVIDIA GeForce GTX 1650 (dGPU)", fill=(120, 255, 150))
+        draw.text((35, 80), f"GPU: Discrete GPU (dGPU Accelerated)", fill=(120, 255, 150))
 
         # Draw prompt text snippet
         prompt_snippet = task.prompt[:160] + ("..." if len(task.prompt) > 160 else "")
