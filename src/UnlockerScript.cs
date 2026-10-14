@@ -3,41 +3,65 @@ using System.IO;
 
 namespace GoogleFlowDesktop
 {
+    /// <summary>
+    /// Provides the script injected into the Flow webview. The full Google Labs
+    /// Country Unlocker lives in unlocker.js next to the executable; if it is
+    /// missing we still inject a minimal prompt-injection bridge.
+    /// </summary>
     public static class UnlockerScript
     {
+        /// <summary>Robust prompt inserter that works with React/Quill-style inputs.</summary>
         private const string DomBridge = @"
 (function() {
+    if (window.__flowNativeBridge && window.__flowNativeBridge.__v === 2) return;
     window.__flowNativeBridge = {
-        insertPrompt: function(promptText) {
+        __v: 2,
+        findInput: function() {
             const selectors = [
                 'textarea[placeholder*=""Describe"" i]',
                 'textarea[placeholder*=""prompt"" i]',
                 'textarea[aria-label*=""prompt"" i]',
-                'textarea',
-                '[contenteditable=""true""]'
+                'div[contenteditable=""true""][role=""textbox""]',
+                'div[contenteditable=""true""]',
+                'textarea'
             ];
-            let target = null;
             for (let s of selectors) {
                 const elems = document.querySelectorAll(s);
                 for (let el of elems) {
-                    if (el.offsetParent !== null) { target = el; break; }
+                    const rect = el.getBoundingClientRect();
+                    if (rect.width > 0 && rect.height > 0) return el;
                 }
-                if (target) break;
             }
-            if (target) {
-                target.focus();
-                if (target.tagName.toLowerCase() === 'textarea' || target.tagName.toLowerCase() === 'input') {
-                    target.value = promptText;
-                    target.dispatchEvent(new Event('input', { bubbles: true }));
-                    target.dispatchEvent(new Event('change', { bubbles: true }));
-                } else {
-                    target.innerText = promptText;
-                    target.dispatchEvent(new Event('input', { bubbles: true }));
-                }
-                return true;
+            return null;
+        },
+        insertPrompt: function(promptText) {
+            const el = window.__flowNativeBridge.findInput();
+            if (!el) {
+                if (navigator.clipboard) { try { navigator.clipboard.writeText(promptText); } catch(e) {} }
+                return false;
             }
-            if (navigator.clipboard) { navigator.clipboard.writeText(promptText); }
-            return false;
+            el.focus();
+            const tag = el.tagName.toLowerCase();
+            if (tag === 'textarea' || tag === 'input') {
+                const proto = (tag === 'textarea') ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+                const setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
+                setter.call(el, promptText);
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+            } else {
+                el.textContent = '';
+                const sel = window.getSelection();
+                const range = document.createRange();
+                range.selectNodeContents(el);
+                sel.removeAllRanges();
+                sel.addRange(range);
+                let ok = false;
+                try { ok = document.execCommand('insertText', false, promptText); } catch(e) { ok = false; }
+                if (!ok) { el.textContent = promptText; }
+                el.dispatchEvent(new InputEvent('input', { bubbles: true, data: promptText }));
+            }
+            if (navigator.clipboard) { try { navigator.clipboard.writeText(promptText); } catch(e) {} }
+            return true;
         }
     };
 })();
@@ -45,31 +69,19 @@ namespace GoogleFlowDesktop
 
         public static string GetScript()
         {
-            // 1. Try local unlocker.js in app directory
-            string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "unlocker.js");
-            if (File.Exists(localPath))
+            try
             {
-                try
+                string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "unlocker.js");
+                if (File.Exists(localPath))
                 {
-                    return File.ReadAllText(localPath);
-                }
-                catch { }
-            }
-
-            // 2. Try user's document path
-            string userPath = @"C:\Users\danny\Documents\новый 1.txt";
-            if (File.Exists(userPath))
-            {
-                try
-                {
-                    string content = File.ReadAllText(userPath);
-                    if (!string.IsNullOrEmpty(content) && content.Contains("cPZSdc"))
+                    string content = File.ReadAllText(localPath);
+                    if (!string.IsNullOrEmpty(content))
                     {
                         return content + "\n\n" + DomBridge;
                     }
                 }
-                catch { }
             }
+            catch { }
 
             return DomBridge;
         }

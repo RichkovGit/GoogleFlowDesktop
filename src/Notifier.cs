@@ -1,81 +1,82 @@
 using System;
-using System.Diagnostics;
+using System.Drawing;
 using System.Runtime.InteropServices;
-using System.Threading;
+using System.Windows.Forms;
 
 namespace GoogleFlowDesktop
 {
-    public static class Notifier
+    /// <summary>
+    /// Native Windows notifications. Uses a hidden NotifyIcon balloon instead of
+    /// shelling out to PowerShell (faster, no window flash, works offline).
+    /// </summary>
+    public class Notifier : IDisposable
     {
         [DllImport("user32.dll")]
         private static extern bool MessageBeep(uint uType);
 
-        public static void PlaySystemChime(string chimeType = "asterisk")
+        private NotifyIcon icon;
+        private DateTime lastToast = DateTime.MinValue;
+
+        public void Attach(Icon appIcon)
+        {
+            if (icon != null) return;
+            icon = new NotifyIcon();
+            icon.Icon = appIcon != null ? appIcon : SystemIcons.Application;
+            icon.Text = "Google Flow Desktop";
+            icon.Visible = true;
+        }
+
+        public void PlayChime(string kind)
         {
             try
             {
                 uint val = 0x00000040; // MB_ICONASTERISK
-                if (chimeType == "error") val = 0x00000010;
-                else if (chimeType == "warning") val = 0x00000030;
+                if (kind == "error") val = 0x00000010;
+                else if (kind == "warning") val = 0x00000030;
                 MessageBeep(val);
             }
             catch { }
         }
 
-        private static DateTime lastToastTime = DateTime.MinValue;
-
-        public static void ShowToast(string title, string message)
+        public void ShowToast(string title, string message)
         {
-            lock (typeof(Notifier))
-            {
-                if ((DateTime.Now - lastToastTime).TotalSeconds < 2.5)
-                    return;
-                lastToastTime = DateTime.Now;
-            }
+            ShowToast(title, message, false);
+        }
 
-            ThreadPool.QueueUserWorkItem(state =>
+        public void ShowToast(string title, string message, bool force)
+        {
+            if (icon == null) return;
+            if (!force && (DateTime.Now - lastToast).TotalSeconds < 4.0) return;
+            lastToast = DateTime.Now;
+
+            try
+            {
+                icon.BalloonTipTitle = title;
+                icon.BalloonTipText = message;
+                icon.BalloonTipIcon = ToolTipIcon.Info;
+                icon.ShowBalloonTip(5000);
+            }
+            catch { }
+        }
+
+        public void NotifySnapshotSaved(string fileName)
+        {
+            PlayChime("asterisk");
+            ShowToast("Google Flow: снимок сохранён", fileName, true);
+        }
+
+        public void Dispose()
+        {
+            if (icon != null)
             {
                 try
                 {
-                    string safeTitle = (title ?? "").Replace("'", "''").Replace("\"", "`\"");
-                    string safeMsg = (message ?? "").Replace("'", "''").Replace("\"", "`\"");
-
-                    string psCode = string.Format(@"
-try {{
-    [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
-    `$template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
-    `$textNodes = `$template.GetElementsByTagName('text')
-    `$textNodes.Item(0).AppendChild(`$template.CreateTextNode('{0}')) | Out-Null
-    `$textNodes.Item(1).AppendChild(`$template.CreateTextNode('{1}')) | Out-Null
-    `$notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Google Flow Desktop')
-    `$notification = [Windows.UI.Notifications.ToastNotification]::new(`$template)
-    `$notifier.Show(`$notification)
-}} catch {{}}
-", safeTitle, safeMsg);
-
-                    var psi = new ProcessStartInfo
-                    {
-                        FileName = "powershell.exe",
-                        Arguments = "-NoProfile -WindowStyle Hidden -Command \"" + psCode + "\"",
-                        CreateNoWindow = true,
-                        UseShellExecute = false
-                    };
-                    Process.Start(psi);
+                    icon.Visible = false;
+                    icon.Dispose();
                 }
                 catch { }
-            });
-        }
-
-        public static void NotifyBatchFinished(string batchId, int successCount, int failCount)
-        {
-            PlaySystemChime("asterisk");
-            ShowToast("Google Flow: Пакет завершён!", string.Format("Создано: {0} медиа | Ошибок: {1}", successCount, failCount));
-        }
-
-        public static void NotifyItemCompleted(string taskId, string fileName)
-        {
-            PlaySystemChime("asterisk");
-            ShowToast("Google Flow: Рендер готов", "Сохранено: " + fileName);
+                icon = null;
+            }
         }
     }
 }

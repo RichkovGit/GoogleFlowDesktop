@@ -4,757 +4,983 @@ using System.Drawing;
 using System.Diagnostics;
 using System.Windows.Forms;
 using System.Collections.Generic;
-using System.Web.Script.Serialization;
+using System.Text;
 using System.Threading.Tasks;
+using System.Web.Script.Serialization;
 using Microsoft.Web.WebView2.WinForms;
 using Microsoft.Web.WebView2.Core;
 
 namespace GoogleFlowDesktop
 {
+    /// <summary>
+    /// Application shell. Everything the user interacts with is a native Windows
+    /// control; the only web surface is Google Flow itself inside WebView2.
+    /// </summary>
     public class MainForm : Form
     {
         private static readonly JavaScriptSerializer Json = new JavaScriptSerializer();
 
-        private readonly string projectsDirectory;
+        private const string FlowUrl = "https://flow.google.com/";
+        private const string WebView2DownloadUrl = "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
+
         private readonly string cacheDirectory;
-        private readonly string uiDirectory;
+        private readonly string outputDirectory;
+        private readonly string statePath;
         private readonly string dgpuFlags;
 
-        private LocalServer server;
-        private WorkerDispatcher dispatcher;
+        private HardwareSpecs specs;
+        private IntPtr iconHandle;
 
-        private Panel permanentTopBar;
+        private Notifier notifier;
+
+        private TableLayoutPanel rootGrid;
         private SplitContainer split;
-        private WebView2 wvStudio;
-        private WebView2 wvFlow;
-        private Panel flowLoadingPanel;
-        private Label lblLoadingStatus;
+        private Panel studioHost;
+        private Panel flowHost;
 
-        private Button btnModeSplit;
-        private Button btnModeFlow;
-        private Button btnModeStudio;
-        private Button btnActionSend;
-        private Button btnActionReload;
-        private Button btnActionHome;
+        private WebView2 wvFlow;
+        private Panel overlay;
+        private Label overlayTitle;
+        private Label overlaySub;
+        private ProgressBar overlaySpinner;
+        private FlowLayoutPanel overlayButtons;
+        private FlatButton btnOverlayRetry;
+        private FlatButton btnOverlayRuntime;
+
+        private NativeStudio studio;
+        private NativeTelemetry telemetry;
+
+        private FlatButton btnSegSplit;
+        private FlatButton btnSegFlow;
+        private FlatButton btnSegStudio;
+        private FlatButton btnNavStudio;
+        private FlatButton btnNavHardware;
         private Label lblHardwareBadge;
+        private Label statusLeft;
+        private Label statusRight;
 
         private Timer telemetryTimer;
         private CoreWebView2Environment sharedEnvironment;
-        private HardwareSpecs currentSpecs;
+        private string viewMode = "split";
+        private int savedSplitter = 0;
+        private bool webViewReady;
 
         public MainForm()
         {
-            // Enforce Windows DirectX High-Performance preference
             GpuConfig.EnforceWindowsDirectXGpuPreference();
-
-            currentSpecs = GpuConfig.DetectHardware();
+            specs = GpuConfig.DetectHardware();
             dgpuFlags = GpuConfig.GetChromiumDgpuArguments();
 
-            string appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".google_flow_desktop");
-            projectsDirectory = Path.Combine(appData, "projects");
+            string appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GoogleFlowDesktop");
             cacheDirectory = Path.Combine(appData, "cache");
-            uiDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ui");
-
-            Directory.CreateDirectory(projectsDirectory);
+            statePath = Path.Combine(appData, "window.json");
+            outputDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "Google Flow Desktop");
             Directory.CreateDirectory(cacheDirectory);
+            Directory.CreateDirectory(outputDirectory);
 
-            dispatcher = new WorkerDispatcher(projectsDirectory);
-            BindDispatcherEvents();
+            notifier = new Notifier();
+            notifier.Attach(null);
 
-            server = new LocalServer(uiDirectory, projectsDirectory);
-
-            InitializePermanentHeaderAndLayout();
+            BuildUi();
+            RestoreWindowState();
 
             telemetryTimer = new Timer();
             telemetryTimer.Interval = 2500;
-            telemetryTimer.Tick += (s, e) =>
-            {
-                GpuConfig.TrimProcessMemory();
-                UpdateHardwareTelemetry();
-            };
+            telemetryTimer.Tick += (s, e) => UpdateTelemetry();
             telemetryTimer.Start();
+
+            this.Shown += OnFormShown;
+            this.FormClosing += OnFormClosing;
         }
 
-        private void InitializePermanentHeaderAndLayout()
+        // ------------------------------------------------------------------
+        // Layout
+        // ------------------------------------------------------------------
+        private void BuildUi()
         {
-            this.Text = "Google Flow - " + currentSpecs.DgpuName + " (dGPU)";
-            this.Size = new Size(1500, 920);
-            this.MinimumSize = new Size(1024, 680);
+            this.Text = "Google Flow Desktop";
+            this.Size = new Size(1480, 900);
+            this.MinimumSize = new Size(1100, 700);
             this.StartPosition = FormStartPosition.CenterScreen;
-            this.BackColor = Color.FromArgb(16, 18, 26);
+            this.BackColor = Theme.BgBase;
+            this.Font = Theme.F9;
+            this.KeyPreview = true;
 
-            // ========================================================
-            // 1. PERMANENT TOP HEADER BAR (NEVER COLLAPSES!)
-            // ========================================================
-            permanentTopBar = new Panel();
-            permanentTopBar.Dock = DockStyle.Top;
-            permanentTopBar.Height = 46;
-            permanentTopBar.BackColor = Color.FromArgb(17, 20, 30);
-            permanentTopBar.Padding = new Padding(10, 0, 10, 0);
-            this.Controls.Add(permanentTopBar);
+            Icon appIcon = AppIcon.Create(out iconHandle);
+            this.Icon = appIcon;
 
-            // App Brand
-            Label lblBrand = new Label();
-            lblBrand.Text = "⚡ Google Flow Desktop";
-            lblBrand.ForeColor = Color.FromArgb(0, 210, 255);
-            lblBrand.Font = new Font("Segoe UI", 10, FontStyle.Bold);
-            lblBrand.AutoSize = true;
-            lblBrand.Location = new Point(12, 13);
-            permanentTopBar.Controls.Add(lblBrand);
+            this.KeyDown += OnShortcut;
 
-            int curX = 230;
-            int curY = 7;
+            rootGrid = new TableLayoutPanel();
+            rootGrid.Dock = DockStyle.Fill;
+            rootGrid.ColumnCount = 1;
+            rootGrid.RowCount = 3;
+            rootGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            rootGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 56f));
+            rootGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            rootGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 28f));
+            rootGrid.BackColor = Theme.BgBase;
+            this.Controls.Add(rootGrid);
 
-            // Segmented View Mode Buttons (ALWAYS VISIBLE!)
-            btnModeSplit = CreateHeaderButton("◫ Сплит (50/50)", new Point(curX, curY), 130, true);
-            btnModeSplit.Click += (s, e) => SetViewMode("split");
-            permanentTopBar.Controls.Add(btnModeSplit);
-            curX += 135;
+            rootGrid.Controls.Add(BuildHeader(), 0, 0);
+            rootGrid.Controls.Add(BuildContent(), 0, 1);
+            rootGrid.Controls.Add(BuildStatusBar(), 0, 2);
+        }
 
-            btnModeFlow = CreateHeaderButton("🎨 Только Flow", new Point(curX, curY), 125, false);
-            btnModeFlow.Click += (s, e) => SetViewMode("flow");
-            permanentTopBar.Controls.Add(btnModeFlow);
-            curX += 130;
+        private Control BuildHeader()
+        {
+            TableLayoutPanel header = new TableLayoutPanel();
+            header.Dock = DockStyle.Fill;
+            header.ColumnCount = 3;
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            header.BackColor = Theme.BgRail;
+            header.Margin = new Padding(0);
+            header.Padding = new Padding(14, 0, 12, 0);
 
-            btnModeStudio = CreateHeaderButton("✨ Только Студия", new Point(curX, curY), 130, false);
-            btnModeStudio.Click += (s, e) => SetViewMode("studio");
-            permanentTopBar.Controls.Add(btnModeStudio);
-            curX += 140;
+            Label brand = new Label();
+            brand.Text = "⚡ Google Flow Desktop";
+            brand.Font = Theme.F12B;
+            brand.ForeColor = Theme.Accent;
+            brand.AutoSize = true;
+            brand.Margin = new Padding(0, 17, 26, 0);
+            header.Controls.Add(brand, 0, 0);
 
-            // Flow Quick Action Buttons
-            btnActionSend = CreateHeaderButton("🚀 Вставить во Flow", new Point(curX, curY), 160, false, true);
-            btnActionSend.Click += (s, e) =>
-            {
-                ExecuteJsStudio("postHostMessage({ type: 'SEND_TO_FLOW', prompt: getCompiledPrompt() });");
-            };
-            permanentTopBar.Controls.Add(btnActionSend);
-            curX += 166;
+            FlowLayoutPanel seg = new FlowLayoutPanel();
+            seg.AutoSize = true;
+            seg.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            seg.WrapContents = false;
+            seg.FlowDirection = FlowDirection.LeftToRight;
+            seg.Margin = new Padding(0, 11, 0, 0);
+            seg.BackColor = Theme.BgRail;
 
-            btnActionReload = CreateHeaderButton("🔄", new Point(curX, curY), 36, false);
-            btnActionReload.Click += (s, e) =>
-            {
-                if (wvFlow.CoreWebView2 != null)
-                {
-                    flowLoadingPanel.Visible = true;
-                    wvFlow.CoreWebView2.Reload();
-                }
-            };
-            permanentTopBar.Controls.Add(btnActionReload);
-            curX += 42;
+            btnSegSplit = SegButton("◫ Сплит");
+            btnSegSplit.Click += (s, e) => SetViewMode("split");
+            seg.Controls.Add(btnSegSplit);
 
-            btnActionHome = CreateHeaderButton("🏠", new Point(curX, curY), 36, false);
-            btnActionHome.Click += (s, e) =>
-            {
-                if (wvFlow.CoreWebView2 != null)
-                {
-                    flowLoadingPanel.Visible = true;
-                    wvFlow.CoreWebView2.Navigate("https://flow.google.com/");
-                }
-            };
-            permanentTopBar.Controls.Add(btnActionHome);
-            curX += 46;
+            btnSegFlow = SegButton("🎨 Только Flow");
+            btnSegFlow.Click += (s, e) => SetViewMode("flow");
+            seg.Controls.Add(btnSegFlow);
 
-            // Live Hardware Badge on the right of the header bar
+            btnSegStudio = SegButton("✨ Только Студия");
+            btnSegStudio.Click += (s, e) => SetViewMode("studio");
+            seg.Controls.Add(btnSegStudio);
+            header.Controls.Add(seg, 1, 0);
+
+            FlowLayoutPanel right = new FlowLayoutPanel();
+            right.AutoSize = true;
+            right.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            right.WrapContents = false;
+            right.FlowDirection = FlowDirection.RightToLeft;
+            right.Margin = new Padding(0, 11, 0, 0);
+            right.BackColor = Theme.BgRail;
+
+            FlatButton btnUpdate = SegButton("⬆ Обновления");
+            btnUpdate.Click += (s, e) => CheckUpdates(true);
+            right.Controls.Add(btnUpdate);
+
+            FlatButton btnSnapshot = SegButton("📸 Снимок Flow");
+            btnSnapshot.Click += async (s, e) => await CaptureSnapshotAsync();
+            right.Controls.Add(btnSnapshot);
+
+            FlatButton btnFolder = SegButton("📁 Папка");
+            btnFolder.Click += (s, e) => OpenOutputFolder();
+            right.Controls.Add(btnFolder);
+
+            FlatButton btnReload = SegButton("⟳");
+            btnReload.Width = 38;
+            btnReload.Click += (s, e) => ReloadFlow();
+            right.Controls.Add(btnReload);
+
+            FlatButton btnHome = SegButton("⌂");
+            btnHome.Width = 38;
+            btnHome.Click += (s, e) => NavigateFlow(FlowUrl);
+            right.Controls.Add(btnHome);
+
             lblHardwareBadge = new Label();
-            lblHardwareBadge.Text = string.Format("🎮 {0} ({1}) • 💾 {2} MB", currentSpecs.DgpuName, currentSpecs.DgpuVram, currentSpecs.AppRamMb);
-            lblHardwareBadge.ForeColor = Color.FromArgb(52, 211, 153);
-            lblHardwareBadge.Font = new Font("Segoe UI", 9, FontStyle.Bold);
+            lblHardwareBadge.Text = "🎮 " + specs.DgpuName;
+            lblHardwareBadge.Font = Theme.F9B;
+            lblHardwareBadge.ForeColor = Theme.Green;
             lblHardwareBadge.AutoSize = true;
-            lblHardwareBadge.Location = new Point(curX + 15, 14);
-            permanentTopBar.Controls.Add(lblHardwareBadge);
+            lblHardwareBadge.Margin = new Padding(6, 17, 0, 0);
+            right.Controls.Add(lblHardwareBadge);
 
-            // ========================================================
-            // 2. DUAL SPLIT CONTAINER (Below Permanent Header)
-            // ========================================================
+            header.Controls.Add(right, 2, 0);
+            UpdateSegSelection("split");
+            return header;
+        }
+
+        private FlatButton SegButton(string text)
+        {
+            FlatButton b = new FlatButton();
+            b.Kind = ButtonKind.Nav;
+            b.Text = text;
+            b.Height = 34;
+            b.AutoSize = false;
+            b.Width = 132;
+            b.Margin = new Padding(0, 0, 4, 0);
+            b.Font = Theme.F9B;
+            return b;
+        }
+
+        private Control BuildContent()
+        {
             split = new SplitContainer();
             split.Dock = DockStyle.Fill;
             split.Orientation = Orientation.Vertical;
-            split.SplitterWidth = 4;
-            split.BackColor = Color.FromArgb(28, 32, 46);
-            this.Controls.Add(split);
-            split.BringToFront();
+            split.SplitterWidth = 6;
+            split.BackColor = Theme.BgBase;
+            split.Margin = new Padding(0);
+            // Panel1MinSize / Panel2MinSize are applied later, once the control
+            // has a real width (setting them too early throws InvalidOperationException).
 
-            // Set 50/50 initially
-            split.SplitterDistance = 680;
+            // --- Left: native studio + rail ---
+            studioHost = new Panel();
+            studioHost.Dock = DockStyle.Fill;
+            studioHost.BackColor = Theme.BgBase;
+            studioHost.Controls.Add(BuildContentHost());
+            studioHost.Controls.Add(BuildRail());
+            split.Panel1.Controls.Add(studioHost);
 
-            // Panel 1: Studio WebView2
-            wvStudio = new WebView2();
-            wvStudio.Dock = DockStyle.Fill;
-            split.Panel1.Controls.Add(wvStudio);
-
-            // Panel 2: Google Flow WebView2 + Fluent Loading Overlay
-            Panel flowHostPanel = new Panel();
-            flowHostPanel.Dock = DockStyle.Fill;
-            flowHostPanel.BackColor = Color.FromArgb(13, 15, 22);
-            split.Panel2.Controls.Add(flowHostPanel);
+            // --- Right: Google Flow webview + native overlay ---
+            flowHost = new Panel();
+            flowHost.Dock = DockStyle.Fill;
+            flowHost.BackColor = Theme.BgBase;
+            split.Panel2.Controls.Add(flowHost);
 
             wvFlow = new WebView2();
             wvFlow.Dock = DockStyle.Fill;
-            flowHostPanel.Controls.Add(wvFlow);
+            flowHost.Controls.Add(wvFlow);
 
-            // Loading screen overlay for Flow
-            flowLoadingPanel = new Panel();
-            flowLoadingPanel.Dock = DockStyle.Fill;
-            flowLoadingPanel.BackColor = Color.FromArgb(13, 15, 22);
-            flowHostPanel.Controls.Add(flowLoadingPanel);
-            flowLoadingPanel.BringToFront();
+            overlay = BuildOverlay();
+            flowHost.Controls.Add(overlay);
+            overlay.BringToFront();
 
-            BuildLoadingScreenUi(flowLoadingPanel);
+            return split;
+        }
 
-            this.Shown += async (s, e) =>
+        private Control BuildRail()
+        {
+            TableLayoutPanel rail = new TableLayoutPanel();
+            rail.Dock = DockStyle.Left;
+            rail.Width = 86;
+            rail.ColumnCount = 1;
+            rail.RowCount = 5;
+            rail.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            rail.RowStyles.Add(new RowStyle(SizeType.Absolute, 74f));
+            rail.RowStyles.Add(new RowStyle(SizeType.Absolute, 74f));
+            rail.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            rail.RowStyles.Add(new RowStyle(SizeType.Absolute, 74f));
+            rail.RowStyles.Add(new RowStyle(SizeType.Absolute, 74f));
+            rail.BackColor = Theme.BgRail;
+            rail.Margin = new Padding(0);
+
+            btnNavStudio = RailButton("✨\nСтудия");
+            btnNavStudio.Selected = true;
+            btnNavStudio.Click += (s, e) => ShowTab("studio");
+            rail.Controls.Add(btnNavStudio, 0, 0);
+
+            btnNavHardware = RailButton("🎮\nЖелезо");
+            btnNavHardware.Click += (s, e) => ShowTab("hardware");
+            rail.Controls.Add(btnNavHardware, 0, 1);
+
+            FlatButton btnTrim = RailButton("🧹\nRAM");
+            btnTrim.Click += (s, e) =>
             {
-                await InitializeSharedWebViewsAsync();
-                Task.Run(async () =>
-                {
-                    await Task.Delay(3500);
-                    var info = await UpdateManager.CheckForUpdatesAsync();
-                    if (info.HasUpdate)
-                    {
-                        ExecuteJsStudio(string.Format("if(window.onUpdateAvailable) window.onUpdateAvailable({0});", Json.Serialize(info)));
-                    }
-                });
+                GpuConfig.TrimProcessMemory();
+                UpdateTelemetry();
+                SetStatus("🧹 Рабочий набор памяти очищен");
             };
+            rail.Controls.Add(btnTrim, 0, 3);
+
+            FlatButton btnOta = RailButton("🔄\nOTA");
+            btnOta.Click += (s, e) => CheckUpdates(true);
+            rail.Controls.Add(btnOta, 0, 4);
+
+            return rail;
         }
 
-        private Button CreateHeaderButton(string text, Point loc, int width, bool isSelected, bool isAccent = false)
+        private FlatButton RailButton(string text)
         {
-            Button btn = new Button();
-            btn.Text = text;
-            btn.Location = loc;
-            btn.Width = width;
-            btn.Height = 32;
-            btn.FlatStyle = FlatStyle.Flat;
-            btn.Cursor = Cursors.Hand;
-            btn.Font = new Font("Segoe UI", 9, FontStyle.Bold);
-
-            if (isAccent)
-            {
-                btn.FlatAppearance.BorderSize = 0;
-                btn.BackColor = Color.FromArgb(0, 160, 220);
-                btn.ForeColor = Color.White;
-            }
-            else if (isSelected)
-            {
-                btn.FlatAppearance.BorderSize = 1;
-                btn.FlatAppearance.BorderColor = Color.FromArgb(0, 210, 255);
-                btn.BackColor = Color.FromArgb(32, 42, 62);
-                btn.ForeColor = Color.FromArgb(0, 210, 255);
-            }
-            else
-            {
-                btn.FlatAppearance.BorderSize = 1;
-                btn.FlatAppearance.BorderColor = Color.FromArgb(42, 48, 66);
-                btn.BackColor = Color.FromArgb(24, 28, 40);
-                btn.ForeColor = Color.FromArgb(210, 218, 230);
-            }
-            return btn;
+            FlatButton b = new FlatButton();
+            b.Kind = ButtonKind.Rail;
+            b.Text = text;
+            b.Dock = DockStyle.Fill;
+            b.Margin = new Padding(8, 5, 8, 5);
+            b.Font = Theme.F8;
+            return b;
         }
 
-        private void BuildLoadingScreenUi(Panel parent)
+        private Control BuildContentHost()
         {
-            TableLayoutPanel table = new TableLayoutPanel();
-            table.Dock = DockStyle.Fill;
-            table.ColumnCount = 1;
-            table.RowCount = 3;
-            table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            table.RowStyles.Add(new RowStyle(SizeType.Percent, 35F));
-            table.RowStyles.Add(new RowStyle(SizeType.Absolute, 50F));
-            table.RowStyles.Add(new RowStyle(SizeType.Percent, 65F));
-            parent.Controls.Add(table);
+            Panel host = new Panel();
+            host.Dock = DockStyle.Fill;
+            host.BackColor = Theme.BgBase;
 
-            Panel emptyTop = new Panel();
-            table.Controls.Add(emptyTop, 0, 0);
+            studio = new NativeStudio();
+            studio.Dock = DockStyle.Fill;
+            studio.SendToFlowRequested = InjectPromptIntoFlow;
+            studio.StatusChanged = SetStatus;
+            host.Controls.Add(studio);
 
-            lblLoadingStatus = new Label();
-            lblLoadingStatus.Text = "⚡ Загрузка Google Flow на " + currentSpecs.DgpuName + "...";
-            lblLoadingStatus.ForeColor = Color.FromArgb(0, 210, 255);
-            lblLoadingStatus.Font = new Font("Segoe UI", 12, FontStyle.Bold);
-            lblLoadingStatus.TextAlign = ContentAlignment.MiddleCenter;
-            lblLoadingStatus.Dock = DockStyle.Fill;
-            table.Controls.Add(lblLoadingStatus, 0, 1);
+            telemetry = new NativeTelemetry();
+            telemetry.Dock = DockStyle.Fill;
+            telemetry.Visible = false;
+            telemetry.TrimRequested = () =>
+            {
+                GpuConfig.TrimProcessMemory();
+                UpdateTelemetry();
+                SetStatus("🧹 Рабочий набор памяти очищен");
+            };
+            telemetry.ReapplyGpuRequested = () =>
+            {
+                bool ok = GpuConfig.EnforceWindowsDirectXGpuPreference();
+                SetStatus(ok ? "⚙️ Реестр DirectX обновлён (GpuPreference=2)" : "⚙️ Не удалось записать реестр");
+            };
+            telemetry.CheckUpdatesRequested = () => CheckUpdates(true);
+            host.Controls.Add(telemetry);
 
-            Label lblSub = new Label();
-            lblSub.Text = "🔓 Разблокировка Google Labs Country Unlocker v4.1 активна";
-            lblSub.ForeColor = Color.FromArgb(148, 163, 184);
-            lblSub.Font = new Font("Segoe UI", 10, FontStyle.Regular);
-            lblSub.TextAlign = ContentAlignment.MiddleCenter;
-            lblSub.Dock = DockStyle.Fill;
-            table.Controls.Add(lblSub, 0, 2);
+            return host;
         }
 
-        private async Task InitializeSharedWebViewsAsync()
+        private Panel BuildOverlay()
+        {
+            Panel p = new Panel();
+            p.Dock = DockStyle.Fill;
+            p.BackColor = Theme.BgBase;
+
+            TableLayoutPanel grid = new TableLayoutPanel();
+            grid.Dock = DockStyle.Fill;
+            grid.ColumnCount = 1;
+            grid.RowCount = 6;
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            grid.RowStyles.Add(new RowStyle(SizeType.Percent, 38f));
+            grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            grid.RowStyles.Add(new RowStyle(SizeType.Percent, 62f));
+            grid.BackColor = Theme.BgBase;
+            p.Controls.Add(grid);
+
+            overlayTitle = new Label();
+            overlayTitle.Text = "⚡ Загрузка Google Flow...";
+            overlayTitle.Font = Theme.F12B;
+            overlayTitle.ForeColor = Theme.Accent;
+            overlayTitle.TextAlign = ContentAlignment.MiddleCenter;
+            overlayTitle.Dock = DockStyle.Fill;
+            overlayTitle.AutoSize = true;
+            grid.Controls.Add(overlayTitle, 0, 1);
+
+            overlaySub = new Label();
+            overlaySub.Text = "Аппаратное ускорение Direct3D • Country Unlocker активен";
+            overlaySub.Font = Theme.F10;
+            overlaySub.ForeColor = Theme.TextMuted;
+            overlaySub.TextAlign = ContentAlignment.MiddleCenter;
+            overlaySub.Dock = DockStyle.Fill;
+            overlaySub.AutoSize = true;
+            overlaySub.Margin = new Padding(0, 6, 0, 14);
+            grid.Controls.Add(overlaySub, 0, 2);
+
+            overlaySpinner = new ProgressBar();
+            overlaySpinner.Style = ProgressBarStyle.Marquee;
+            overlaySpinner.MarqueeAnimationSpeed = 30;
+            overlaySpinner.Width = 260;
+            overlaySpinner.Height = 6;
+            overlaySpinner.Anchor = AnchorStyles.None;
+            grid.Controls.Add(overlaySpinner, 0, 3);
+
+            overlayButtons = new FlowLayoutPanel();
+            overlayButtons.AutoSize = true;
+            overlayButtons.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            overlayButtons.WrapContents = false;
+            overlayButtons.FlowDirection = FlowDirection.LeftToRight;
+            overlayButtons.Anchor = AnchorStyles.None;
+            overlayButtons.Margin = new Padding(0, 16, 0, 0);
+            overlayButtons.BackColor = Theme.BgBase;
+            overlayButtons.Visible = false;
+
+            btnOverlayRetry = Ui.Button("↻ Повторить", ButtonKind.Ghost, 130);
+            btnOverlayRetry.Height = 34;
+            btnOverlayRetry.Click += (s, e) => ReloadFlow();
+            overlayButtons.Controls.Add(btnOverlayRetry);
+
+            btnOverlayRuntime = Ui.Button("📥 Установить WebView2", ButtonKind.Accent, 190);
+            btnOverlayRuntime.Height = 34;
+            btnOverlayRuntime.Visible = false;
+            btnOverlayRuntime.Click += (s, e) => OpenExternal(WebView2DownloadUrl);
+            overlayButtons.Controls.Add(btnOverlayRuntime);
+
+            grid.Controls.Add(overlayButtons, 0, 4);
+            return p;
+        }
+
+        private Control BuildStatusBar()
+        {
+            TableLayoutPanel bar = new TableLayoutPanel();
+            bar.Dock = DockStyle.Fill;
+            bar.ColumnCount = 2;
+            bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            bar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            bar.BackColor = Theme.BgRail;
+            bar.Margin = new Padding(0);
+            bar.Padding = new Padding(14, 0, 14, 0);
+
+            statusLeft = new Label();
+            statusLeft.Text = "Готово";
+            statusLeft.Font = Theme.F8;
+            statusLeft.ForeColor = Theme.TextMuted;
+            statusLeft.AutoSize = true;
+            statusLeft.Margin = new Padding(0, 6, 0, 0);
+            bar.Controls.Add(statusLeft, 0, 0);
+
+            statusRight = new Label();
+            statusRight.Text = "v" + UpdateManager.CurrentVersion + " • dGPU Direct3D";
+            statusRight.Font = Theme.F8;
+            statusRight.ForeColor = Theme.TextDim;
+            statusRight.AutoSize = true;
+            statusRight.Margin = new Padding(0, 6, 0, 0);
+            bar.Controls.Add(statusRight, 1, 0);
+
+            return bar;
+        }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            Theme.ApplyWindowChrome(this);
+            Theme.DarkenControl(this);
+        }
+
+        // ------------------------------------------------------------------
+        // Startup / WebView2
+        // ------------------------------------------------------------------
+        private async void OnFormShown(object sender, EventArgs e)
+        {
+            ApplyPanelMinimums();
+            ApplyViewModeLayout();
+            await InitializeWebViewAsync();
+
+            await Task.Delay(2500);
+            await CheckUpdatesAsync(false);
+        }
+
+        /// <summary>Applied after the SplitContainer has a real width.</summary>
+        private void ApplyPanelMinimums()
         {
             try
             {
-                string sharedCache = Path.Combine(cacheDirectory, "shared_profile");
-                var envOptions = new CoreWebView2EnvironmentOptions(dgpuFlags);
-                sharedEnvironment = await CoreWebView2Environment.CreateAsync(null, sharedCache, envOptions);
-
-                await wvStudio.EnsureCoreWebView2Async(sharedEnvironment);
-                await wvFlow.EnsureCoreWebView2Async(sharedEnvironment);
-
-                // Setup Studio WebView
-                wvStudio.CoreWebView2.Settings.IsStatusBarEnabled = false;
-                wvStudio.WebMessageReceived += OnStudioWebMessage;
-                wvStudio.CoreWebView2.Navigate(string.Format("http://127.0.0.1:{0}/index.html", server.Port));
-
-                // Setup Flow WebView
-                string unlockerCode = UnlockerScript.GetScript();
-                await wvFlow.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(unlockerCode);
-
-                wvFlow.CoreWebView2.Settings.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
-                wvFlow.CoreWebView2.Settings.IsStatusBarEnabled = false;
-                wvFlow.WebMessageReceived += OnFlowWebMessage;
-
-                wvFlow.CoreWebView2.NavigationCompleted += (s, e) =>
-                {
-                    flowLoadingPanel.Visible = false;
-                };
-
-                wvFlow.CoreWebView2.NavigationStarting += (s, e) =>
-                {
-                    if (lblLoadingStatus != null)
-                    {
-                        lblLoadingStatus.Text = "⚡ Подключение к " + e.Uri + "...";
-                    }
-                };
-
-                wvFlow.CoreWebView2.Navigate("https://flow.google.com/");
-            }
-            catch (Exception ex)
-            {
-                if (lblLoadingStatus != null)
-                {
-                    lblLoadingStatus.Text = "Ошибка инициализации: " + ex.Message;
-                }
-            }
-        }
-
-        public void SetViewMode(string mode)
-        {
-            btnModeSplit.BackColor = Color.FromArgb(24, 28, 40);
-            btnModeSplit.ForeColor = Color.FromArgb(210, 218, 230);
-            btnModeFlow.BackColor = Color.FromArgb(24, 28, 40);
-            btnModeFlow.ForeColor = Color.FromArgb(210, 218, 230);
-            btnModeStudio.BackColor = Color.FromArgb(24, 28, 40);
-            btnModeStudio.ForeColor = Color.FromArgb(210, 218, 230);
-
-            if (mode == "flow")
-            {
-                split.Panel1Collapsed = true;
-                split.Panel2Collapsed = false;
-                btnModeFlow.BackColor = Color.FromArgb(32, 42, 62);
-                btnModeFlow.ForeColor = Color.FromArgb(0, 210, 255);
-            }
-            else if (mode == "studio")
-            {
-                split.Panel1Collapsed = false;
-                split.Panel2Collapsed = true;
-                btnModeStudio.BackColor = Color.FromArgb(32, 42, 62);
-                btnModeStudio.ForeColor = Color.FromArgb(0, 210, 255);
-            }
-            else // split 50/50
-            {
-                split.Panel1Collapsed = false;
-                split.Panel2Collapsed = false;
-                split.SplitterDistance = this.Width / 2 - 10;
-                btnModeSplit.BackColor = Color.FromArgb(32, 42, 62);
-                btnModeSplit.ForeColor = Color.FromArgb(0, 210, 255);
-            }
-
-            ExecuteJsStudio(string.Format("if(window.onViewModeChanged) window.onViewModeChanged('{0}');", mode));
-        }
-
-        private void OnFlowWebMessage(object sender, CoreWebView2WebMessageReceivedEventArgs e)
-        {
-            try
-            {
-                string raw = e.TryGetWebMessageAsString();
-                var data = Json.Deserialize<Dictionary<string, object>>(raw);
-                if (data == null) return;
-                string mtype = data.ContainsKey("type") ? data["type"].ToString() : "";
-                if (mtype == "SET_VIEW_MODE")
-                {
-                    string mode = data.ContainsKey("mode") ? data["mode"].ToString() : "split";
-                    this.BeginInvoke(new Action(() => SetViewMode(mode)));
-                }
+                split.Panel1MinSize = 380;
+                split.Panel2MinSize = 360;
             }
             catch { }
         }
 
-        private void OnStudioWebMessage(object sender, CoreWebView2WebMessageReceivedEventArgs e)
+        private async Task InitializeWebViewAsync()
         {
             try
             {
-                string raw = e.TryGetWebMessageAsString();
-                var data = Json.Deserialize<Dictionary<string, object>>(raw);
-                if (data == null) return;
-
-                string mtype = data.ContainsKey("type") ? data["type"].ToString() : "";
-
-                switch (mtype)
-                {
-                    case "SET_VIEW_MODE":
-                        string mode = data.ContainsKey("mode") ? data["mode"].ToString() : "split";
-                        this.BeginInvoke(new Action(() => SetViewMode(mode)));
-                        break;
-
-                    case "RELOAD_FLOW":
-                        if (wvFlow.CoreWebView2 != null)
-                        {
-                            flowLoadingPanel.Visible = true;
-                            wvFlow.CoreWebView2.Reload();
-                        }
-                        break;
-
-                    case "NAVIGATE_FLOW":
-                        string targetUrl = data.ContainsKey("url") ? data["url"].ToString() : "https://flow.google.com/";
-                        if (wvFlow.CoreWebView2 != null)
-                        {
-                            flowLoadingPanel.Visible = true;
-                            wvFlow.CoreWebView2.Navigate(targetUrl);
-                        }
-                        break;
-
-                    case "SEND_TO_FLOW":
-                        string promptText = data.ContainsKey("prompt") ? data["prompt"].ToString() : "";
-                        InjectPromptIntoFlow(promptText);
-                        break;
-
-                    case "ADD_SINGLE_TASK":
-                        if (data.ContainsKey("task"))
-                        {
-                            var tDict = data["task"] as Dictionary<string, object>;
-                            if (tDict != null)
-                            {
-                                var task = new TaskItem
-                                {
-                                    TaskId = tDict.ContainsKey("task_id") ? tDict["task_id"].ToString() : ("task_" + Guid.NewGuid().ToString("N").Substring(0, 8)),
-                                    Prompt = tDict.ContainsKey("prompt") ? tDict["prompt"].ToString() : "",
-                                    NegativePrompt = tDict.ContainsKey("negative_prompt") ? tDict["negative_prompt"].ToString() : "",
-                                    AspectRatio = tDict.ContainsKey("aspect_ratio") ? tDict["aspect_ratio"].ToString() : "1:1",
-                                    MediaType = tDict.ContainsKey("media_type") ? tDict["media_type"].ToString() : "image",
-                                    Seed = tDict.ContainsKey("seed") ? Convert.ToUInt32(tDict["seed"]) : TaskBatchEngine.GenerateSecureSeed()
-                                };
-                                dispatcher.AddTask(task);
-                            }
-                        }
-                        break;
-
-                    case "LAUNCH_MULTI_SEED":
-                        string p = data.ContainsKey("prompt") ? data["prompt"].ToString() : "";
-                        int count = data.ContainsKey("count") ? Convert.ToInt32(data["count"]) : 4;
-                        string mtypeVal = data.ContainsKey("media_type") ? data["media_type"].ToString() : "image";
-                        string ar = data.ContainsKey("aspect_ratio") ? data["aspect_ratio"].ToString() : "1:1";
-                        string neg = data.ContainsKey("negative_prompt") ? data["negative_prompt"].ToString() : "";
-                        dispatcher.AddBatch(TaskBatchEngine.GenerateMultiSeedBatch(p, count, "Flow High-Quality (dGPU)", neg, ar, mtypeVal));
-                        break;
-
-                    case "LAUNCH_CARTESIAN":
-                        string sub = data.ContainsKey("subject") ? data["subject"].ToString() : "";
-                        var styles = ExtractStringList(data, "styles");
-                        var lights = ExtractStringList(data, "lights");
-                        string arCart = data.ContainsKey("aspect_ratio") ? data["aspect_ratio"].ToString() : "16:9";
-                        string negCart = data.ContainsKey("negative_prompt") ? data["negative_prompt"].ToString() : "";
-                        dispatcher.AddBatch(TaskBatchEngine.GenerateCartesianMatrixBatch(sub, styles, lights, negCart, arCart));
-                        break;
-
-                    case "LAUNCH_REF_MAPPER":
-                        string pRef = data.ContainsKey("prompt") ? data["prompt"].ToString() : "";
-                        var paths = ExtractStringList(data, "paths");
-                        string arRef = data.ContainsKey("aspect_ratio") ? data["aspect_ratio"].ToString() : "1:1";
-                        string negRef = data.ContainsKey("negative_prompt") ? data["negative_prompt"].ToString() : "";
-                        dispatcher.AddBatch(TaskBatchEngine.GenerateBatchReferenceMapper(paths, pRef, negRef, arRef));
-                        break;
-
-                    case "PAUSE_QUEUE":
-                        dispatcher.Pause();
-                        break;
-
-                    case "RESUME_QUEUE":
-                        dispatcher.Resume();
-                        break;
-
-                    case "CLEAR_COMPLETED_TASKS":
-                        dispatcher.ClearCompleted();
-                        break;
-
-                    case "RETRY_TASK":
-                        string tid = data.ContainsKey("task_id") ? data["task_id"].ToString() : "";
-                        dispatcher.RetryTask(tid);
-                        break;
-
-                    case "OPEN_PROJECTS_FOLDER":
-                        Process.Start("explorer.exe", projectsDirectory);
-                        break;
-
-                    case "TRIM_MEMORY":
-                        GpuConfig.TrimProcessMemory();
-                        UpdateHardwareTelemetry();
-                        break;
-
-                    case "REAPPLY_GPU":
-                        GpuConfig.EnforceWindowsDirectXGpuPreference();
-                        break;
-
-                    case "REFRESH_GALLERY":
-                    case "UI_READY":
-                        SendGalleryItemsToUi();
-                        UpdateHardwareTelemetry();
-                        break;
-
-                    case "CHECK_UPDATES":
-                        Task.Run(async () =>
-                        {
-                            var info = await UpdateManager.CheckForUpdatesAsync();
-                            ExecuteJsStudio(string.Format("if(window.onUpdateCheckResult) window.onUpdateCheckResult({0});", Json.Serialize(info)));
-                        });
-                        break;
-
-                    case "INSTALL_UPDATE":
-                        string dlUrl = data.ContainsKey("download_url") ? data["download_url"].ToString() : "";
-                        if (!string.IsNullOrEmpty(dlUrl))
-                        {
-                            Task.Run(async () =>
-                            {
-                                await UpdateManager.DownloadAndApplyUpdateAsync(dlUrl, (pct) =>
-                                {
-                                    ExecuteJsStudio(string.Format("if(window.onUpdateDownloadProgress) window.onUpdateDownloadProgress({0});", pct));
-                                });
-                            });
-                        }
-                        break;
-                }
+                string version = CoreWebView2Environment.GetAvailableBrowserVersionString();
+                if (string.IsNullOrEmpty(version)) throw new Exception("WebView2 Runtime не найден");
+                SetOverlay("⚡ Загрузка Google Flow...",
+                    "WebView2 " + version + " • Direct3D • Country Unlocker активен", false, false);
             }
             catch (Exception ex)
             {
-                Debug.WriteLine("[MainForm] WebMessage error: " + ex.Message);
+                ShowOverlayError("WebView2 Runtime не установлен или повреждён",
+                    ex.Message + ". Установите Microsoft Edge WebView2 Runtime и повторите.", true);
+                return;
             }
-        }
 
-        private List<string> ExtractStringList(Dictionary<string, object> dict, string key)
-        {
-            var res = new List<string>();
-            if (dict.ContainsKey(key))
+            try
             {
-                var arr = dict[key] as System.Collections.ArrayList;
-                if (arr != null)
+                CoreWebView2EnvironmentOptions options = new CoreWebView2EnvironmentOptions(dgpuFlags);
+                sharedEnvironment = await CoreWebView2Environment.CreateAsync(null, Path.Combine(cacheDirectory, "webview2"), options);
+                await wvFlow.EnsureCoreWebView2Async(sharedEnvironment);
+
+                CoreWebView2 core = wvFlow.CoreWebView2;
+                core.Settings.IsStatusBarEnabled = false;
+                core.Settings.AreDefaultContextMenusEnabled = true;
+                core.Settings.IsZoomControlEnabled = true;
+                core.Settings.AreDevToolsEnabled = true;
+                core.Settings.IsPasswordAutosaveEnabled = false;
+                core.Settings.UserAgent =
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
+                await core.AddScriptToExecuteOnDocumentCreatedAsync(UnlockerScript.GetScript());
+
+                core.NavigationStarting += (s, a) =>
                 {
-                    foreach (var item in arr)
+                    overlay.Visible = true;
+                    overlaySpinner.Visible = true;
+                    overlayButtons.Visible = false;
+                    overlaySpinner.Style = ProgressBarStyle.Marquee;
+                    SetOverlay("⚡ Подключение к Google Flow...", ShortUrl(a.Uri), false, false);
+                };
+
+                core.NavigationCompleted += (s, a) =>
+                {
+                    if (a.IsSuccess)
                     {
-                        if (item != null) res.Add(item.ToString());
+                        overlay.Visible = false;
+                        webViewReady = true;
+                        SetStatus("Google Flow загружен");
                     }
-                }
+                    else
+                    {
+                        webViewReady = false;
+                        ShowOverlayError("Не удалось загрузить Google Flow",
+                            "Сетевая ошибка: " + a.WebErrorStatus + ". Проверьте интернет и нажмите «Повторить».", false);
+                    }
+                };
+
+                core.ProcessFailed += (s, a) =>
+                {
+                    webViewReady = false;
+                    ShowOverlayError("Процесс WebView2 остановлен",
+                        a.ProcessFailedKind + " • " + a.Reason + ". Нажмите «Повторить».", false);
+                };
+
+                core.NewWindowRequested += (s, a) =>
+                {
+                    a.Handled = true;
+                    if (a.Uri != null && (a.Uri.Contains("google.com") || a.Uri.Contains("googleusercontent")))
+                    {
+                        core.Navigate(a.Uri);
+                    }
+                    else
+                    {
+                        OpenExternal(a.Uri);
+                    }
+                };
+
+                core.DocumentTitleChanged += (s, a) =>
+                {
+                    string t = core.DocumentTitle;
+                    this.Text = string.IsNullOrEmpty(t) ? "Google Flow Desktop" : t + " — Google Flow Desktop";
+                };
+
+                core.Navigate(FlowUrl);
             }
-            return res;
+            catch (Exception ex)
+            {
+                ShowOverlayError("Ошибка инициализации WebView2", ex.Message, true);
+            }
         }
 
+        private void SetOverlay(string title, string sub, bool retry, bool runtime)
+        {
+            overlayTitle.Text = title;
+            overlaySub.Text = sub;
+            overlaySpinner.Visible = !retry;
+            overlayButtons.Visible = true;
+            btnOverlayRetry.Visible = true;
+            btnOverlayRuntime.Visible = runtime;
+            overlay.Visible = true;
+        }
+
+        private void ShowOverlayError(string title, string sub, bool runtime)
+        {
+            SetOverlay("⚠ " + title, sub, true, runtime);
+            SetStatus(title);
+        }
+
+        private static string ShortUrl(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return "";
+            return url.Length > 90 ? url.Substring(0, 90) + "..." : url;
+        }
+
+        private void ReloadFlow()
+        {
+            if (wvFlow.CoreWebView2 != null)
+            {
+                overlay.Visible = true;
+                overlaySpinner.Visible = true;
+                overlaySpinner.Style = ProgressBarStyle.Marquee;
+                SetOverlay("⚡ Перезагрузка Google Flow...", "Пожалуйста, подождите", false, false);
+                wvFlow.CoreWebView2.Reload();
+            }
+        }
+
+        private void NavigateFlow(string url)
+        {
+            if (wvFlow.CoreWebView2 != null)
+            {
+                SetOverlay("⚡ Переход к Google Flow...", ShortUrl(url), false, false);
+                wvFlow.CoreWebView2.Navigate(url);
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // Prompt injection
+        // ------------------------------------------------------------------
         private void InjectPromptIntoFlow(string promptText)
         {
             if (string.IsNullOrEmpty(promptText)) return;
+            ClipboardUtil.Set(promptText);
+
+            if (split.Panel2Collapsed) SetViewMode("split");
+
+            if (wvFlow.CoreWebView2 == null)
+            {
+                SetStatus("Промпт скопирован в буфер — Flow ещё загружается");
+                return;
+            }
+
+            string literal = Json.Serialize(promptText);
+            string script =
+                "(function(){try{if(window.__flowNativeBridge&&window.__flowNativeBridge.insertPrompt(" + literal + "))return 'ok';}catch(e){}" +
+                "return 'no';})();";
+
             try
             {
-                if (this.IsHandleCreated && !this.IsDisposed)
+                wvFlow.CoreWebView2.ExecuteScriptAsync(script);
+                wvFlow.Focus();
+                SetStatus(webViewReady ? "🚀 Промпт вставлен в Google Flow (и скопирован)" : "Промпт отправлен в Flow");
+            }
+            catch (Exception ex)
+            {
+                SetStatus("Не удалось вставить промпт: " + ex.Message);
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // Snapshot
+        // ------------------------------------------------------------------
+        private async Task CaptureSnapshotAsync()
+        {
+            if (wvFlow.CoreWebView2 == null)
+            {
+                SetStatus("Flow ещё не готов для снимка");
+                return;
+            }
+            try
+            {
+                using (MemoryStream ms = new MemoryStream())
                 {
-                    this.BeginInvoke(new Action(() =>
-                    {
-                        try
-                        {
-                            // 1. Copy directly to Windows Clipboard so user always has it for Ctrl+V
-                            try { Clipboard.SetText(promptText); } catch { }
+                    await wvFlow.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, ms);
+                    string name = "flow_snapshot_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".png";
+                    string path = Path.Combine(outputDirectory, name);
+                    File.WriteAllBytes(path, ms.ToArray());
+                    notifier.NotifySnapshotSaved(name);
+                    SetStatus("📸 Снимок сохранён: " + name);
+                }
+            }
+            catch (Exception ex)
+            {
+                SetStatus("Не удалось сохранить снимок: " + ex.Message);
+            }
+        }
 
-                            // 2. If currently in studio-only mode, switch to split mode so user sees Flow Canvas
-                            if (split.Panel2Collapsed)
-                            {
-                                SetViewMode("split");
-                            }
+        private void OpenOutputFolder()
+        {
+            try
+            {
+                Directory.CreateDirectory(outputDirectory);
+                Process.Start("explorer.exe", "\"" + outputDirectory + "\"");
+            }
+            catch (Exception ex)
+            {
+                SetStatus("Не удалось открыть папку: " + ex.Message);
+            }
+        }
 
-                            // 3. Inject into Flow WebView DOM
-                            if (wvFlow != null && !wvFlow.IsDisposed && wvFlow.CoreWebView2 != null)
-                            {
-                                string esc = Json.Serialize(promptText);
-                                string script = string.Format(@"
-(function() {{
-    const text = {0};
-    if (window.__flowNativeBridge && window.__flowNativeBridge.insertPrompt(text)) {{
-        return true;
-    }}
-    const selectors = [
-        'textarea',
-        '[contenteditable=""true""]',
-        'input[type=""text""]',
-        '[role=""textbox""]',
-        'div[aria-label*=""prompt"" i]',
-        'p[data-placeholder]'
-    ];
-    for (const sel of selectors) {{
-        const elems = document.querySelectorAll(sel);
-        for (const el of elems) {{
-            if (el.offsetParent !== null) {{
-                el.focus();
-                if (el.tagName.toLowerCase() === 'textarea' || el.tagName.toLowerCase() === 'input') {{
-                    el.value = text;
-                    el.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                    el.dispatchEvent(new Event('change', {{ bubbles: true }}));
-                }} else {{
-                    el.innerText = text;
-                    el.textContent = text;
-                    el.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                }}
-                return true;
-            }}
-        }}
-    }}
-    return false;
-}})();
-", esc);
-                                wvFlow.CoreWebView2.ExecuteScriptAsync(script);
-                                wvFlow.Focus();
-                            }
-                        }
-                        catch { }
-                    }));
+        private void OpenExternal(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return;
+            try { Process.Start(url); }
+            catch (Exception ex) { SetStatus("Не удалось открыть ссылку: " + ex.Message); }
+        }
+
+        // ------------------------------------------------------------------
+        // Tabs & view modes
+        // ------------------------------------------------------------------
+        private void ShowTab(string tab)
+        {
+            bool hardware = tab == "hardware";
+            studio.Visible = !hardware;
+            telemetry.Visible = hardware;
+            btnNavStudio.Selected = !hardware;
+            btnNavHardware.Selected = hardware;
+            if (hardware) UpdateTelemetry();
+        }
+
+        private void SetViewMode(string mode)
+        {
+            viewMode = mode;
+            UpdateSegSelection(mode);
+            ApplyViewModeLayout();
+        }
+
+        private void UpdateSegSelection(string mode)
+        {
+            btnSegSplit.Selected = mode == "split";
+            btnSegFlow.Selected = mode == "flow";
+            btnSegStudio.Selected = mode == "studio";
+        }
+
+        private void ApplyViewModeLayout()
+        {
+            try
+            {
+                if (viewMode == "flow")
+                {
+                    split.Panel1Collapsed = true;
+                    split.Panel2Collapsed = false;
+                }
+                else if (viewMode == "studio")
+                {
+                    split.Panel1Collapsed = false;
+                    split.Panel2Collapsed = true;
+                }
+                else
+                {
+                    split.Panel1Collapsed = false;
+                    split.Panel2Collapsed = false;
+                    int target = savedSplitter > 0 ? savedSplitter : (split.Width / 2);
+                    SetSplitterSafe(target);
                 }
             }
             catch { }
         }
 
-        private void ExecuteJsStudio(string js)
+        private void SetSplitterSafe(int value)
         {
             try
             {
-                if (wvStudio != null && !wvStudio.IsDisposed && wvStudio.CoreWebView2 != null && this.IsHandleCreated && !this.IsDisposed)
+                if (split.Panel1Collapsed || split.Panel2Collapsed) return;
+                int min = split.Panel1MinSize;
+                int max = split.Width - split.Panel2MinSize - split.SplitterWidth;
+                if (max < min) return;
+                int v = value;
+                if (v < min) v = min;
+                if (v > max) v = max;
+                split.SplitterDistance = v;
+            }
+            catch { }
+        }
+
+        // ------------------------------------------------------------------
+        // Telemetry
+        // ------------------------------------------------------------------
+        private void UpdateTelemetry()
+        {
+            try
+            {
+                specs = GpuConfig.DetectHardware();
+                double appRam = GpuConfig.GetCurrentMemoryUsageMb();
+                specs.AppRamMb = appRam;
+
+                if (lblHardwareBadge != null)
                 {
-                    this.BeginInvoke(new Action(() =>
-                    {
-                        try
-                        {
-                            if (wvStudio != null && !wvStudio.IsDisposed && wvStudio.CoreWebView2 != null)
-                            {
-                                wvStudio.CoreWebView2.ExecuteScriptAsync(js);
-                            }
-                        }
-                        catch { }
-                    }));
+                    lblHardwareBadge.Text = "🎮 " + specs.DgpuName + "  •  💾 " + appRam + " MB";
+                }
+                if (telemetry != null && telemetry.Visible)
+                {
+                    telemetry.Update(specs, appRam.ToString("0.0"));
                 }
             }
             catch { }
         }
 
-        private void BindDispatcherEvents()
+        private void SetStatus(string text)
         {
-            dispatcher.TaskAdded += (task) =>
-            {
-                var dict = new Dictionary<string, object>
-                {
-                    { "task_id", task.TaskId },
-                    { "prompt", task.Prompt },
-                    { "seed", task.Seed },
-                    { "aspect_ratio", task.AspectRatio },
-                    { "media_type", task.MediaType },
-                    { "status", task.Status },
-                    { "progress", task.Progress }
-                };
-                ExecuteJsStudio(string.Format("window.onTaskAdded({0});", Json.Serialize(dict)));
-            };
-
-            dispatcher.BatchStarted += (bid, total) =>
-            {
-                ExecuteJsStudio(string.Format("window.onBatchStarted('{0}', {1});", bid, total));
-            };
-
-            dispatcher.ItemProgress += (tid, status, p) =>
-            {
-                ExecuteJsStudio(string.Format("window.onItemProgress('{0}', '{1}', {2});", tid, status, p));
-            };
-
-            dispatcher.ItemCompleted += (tid, outP, sideP) =>
-            {
-                ExecuteJsStudio(string.Format("window.onItemCompleted('{0}', {1}, {2});", tid, Json.Serialize(outP), Json.Serialize(sideP)));
-            };
-
-            dispatcher.ItemFailed += (tid, err) =>
-            {
-                ExecuteJsStudio(string.Format("window.onItemFailed('{0}', {1});", tid, Json.Serialize(err)));
-            };
-
-            dispatcher.BatchFinished += (bid, s, f) =>
-            {
-                ExecuteJsStudio(string.Format("window.onBatchFinished('{0}', {1}, {2});", bid, s, f));
-            };
+            if (statusLeft == null) return;
+            try { statusLeft.Text = text; } catch { }
         }
 
-        private void SendGalleryItemsToUi()
+        // ------------------------------------------------------------------
+        // OTA updates
+        // ------------------------------------------------------------------
+        private void CheckUpdates(bool manual)
         {
-            var items = new List<Dictionary<string, object>>();
+            if (manual) SetStatus("🔍 Проверка обновлений на GitHub...");
+            FireAndForget(CheckUpdatesAsync(manual));
+        }
+
+        /// <summary>Runs a task in the background and observes unhandled failures.</summary>
+        private static void FireAndForget(Task task)
+        {
+            if (task == null) return;
+            task.ContinueWith(delegate(Task t)
+            {
+                Exception ignored = t.Exception;
+            }, TaskContinuationOptions.OnlyOnFaulted);
+        }
+
+        private async Task CheckUpdatesAsync(bool manual)
+        {
+            UpdateInfo info;
             try
             {
-                foreach (string f in Directory.GetFiles(projectsDirectory))
-                {
-                    string ext = Path.GetExtension(f).ToLowerInvariant();
-                    if (ext == ".png" || ext == ".jpg" || ext == ".mp4" || ext == ".webp")
-                    {
-                        string fileName = Path.GetFileName(f);
-                        string sidecarFile = Path.Combine(projectsDirectory, Path.GetFileNameWithoutExtension(f) + ".json");
-                        object meta = null;
-                        if (File.Exists(sidecarFile))
-                        {
-                            try
-                            {
-                                string jsonStr = File.ReadAllText(sidecarFile);
-                                meta = Json.DeserializeObject(jsonStr);
-                            }
-                            catch { }
-                        }
+                info = await UpdateManager.CheckForUpdatesAsync();
+            }
+            catch (Exception ex)
+            {
+                if (manual) notifier.ShowToast("Обновления", "Ошибка проверки: " + ex.Message, true);
+                return;
+            }
 
-                        var item = new Dictionary<string, object>
-                        {
-                            { "filename", fileName },
-                            { "media_url", string.Format("http://127.0.0.1:{0}/media/{1}", server.Port, fileName) },
-                            { "metadata", meta }
-                        };
-                        items.Add(item);
-                    }
+            if (this.IsDisposed) return;
+
+            if (info.HasUpdate)
+            {
+                ShowUpdateDialog(info);
+            }
+            else if (manual)
+            {
+                if (!string.IsNullOrEmpty(info.Error))
+                {
+                    notifier.ShowToast("Обновления", "Не удалось проверить: " + info.Error, true);
+                    SetStatus("Не удалось проверить обновления: " + info.Error);
+                }
+                else
+                {
+                    notifier.ShowToast("Обновления", "У вас последняя версия v" + UpdateManager.CurrentVersion, true);
+                    SetStatus("✅ Установлена последняя версия v" + UpdateManager.CurrentVersion);
+                    telemetry.SetVersionStatus("Версия v" + UpdateManager.CurrentVersion + " (актуальная)", Theme.Green);
                 }
             }
-            catch { }
-
-            string js = "window.onGalleryUpdate(" + Json.Serialize(items) + ");";
-            ExecuteJsStudio(js);
         }
 
-        private void UpdateHardwareTelemetry()
+        private void ShowUpdateDialog(UpdateInfo info)
         {
-            currentSpecs.AppRamMb = GpuConfig.GetCurrentMemoryUsageMb();
-
-            if (lblHardwareBadge != null)
+            UpdateDialog dlg = new UpdateDialog(info);
+            dlg.ApplyRequested += async () =>
             {
-                lblHardwareBadge.Text = string.Format("🎮 {0} ({1}) • 💾 {2} MB", currentSpecs.DgpuName, currentSpecs.DgpuVram, currentSpecs.AppRamMb);
-            }
-
-            var telem = new Dictionary<string, object>
-            {
-                { "dgpu_name", currentSpecs.DgpuName },
-                { "dgpu_vram", currentSpecs.DgpuVram },
-                { "dgpu_driver", currentSpecs.DgpuDriver },
-                { "igpu_name", currentSpecs.IgpuName },
-                { "igpu_vram", currentSpecs.IgpuVram },
-                { "cpu_name", currentSpecs.CpuName },
-                { "cpu_cores", currentSpecs.CpuCores },
-                { "cpu_threads", currentSpecs.CpuThreads },
-                { "total_ram_gb", currentSpecs.TotalRamGb },
-                { "free_ram_gb", currentSpecs.FreeRamGb },
-                { "app_ram_mb", currentSpecs.AppRamMb }
+                try
+                {
+                    await UpdateManager.DownloadAndApplyUpdateAsync(info.DownloadUrl, pct =>
+                    {
+                        if (!dlg.IsDisposed) dlg.SetProgress(pct);
+                    });
+                    SetStatus("Обновление загружено, перезапуск...");
+                    dlg.Close();
+                    Application.Exit();
+                }
+                catch (Exception ex)
+                {
+                    if (!dlg.IsDisposed) dlg.ShowError(ex.Message);
+                }
             };
-
-            ExecuteJsStudio("window.onTelemetryUpdate(" + Json.Serialize(telem) + ");");
+            dlg.ShowDialog(this);
         }
 
-        protected override void OnFormClosing(FormClosingEventArgs e)
+        // ------------------------------------------------------------------
+        // Shortcuts
+        // ------------------------------------------------------------------
+        private void OnShortcut(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.F5)
+            {
+                ReloadFlow();
+                e.Handled = true;
+            }
+            else if (e.Control && e.KeyCode == Keys.Enter)
+            {
+                InjectPromptIntoFlow(studio.CompiledPrompt);
+                e.Handled = true;
+            }
+            else if (e.Control && e.Shift && e.KeyCode == Keys.S)
+            {
+                FireAndForget(CaptureSnapshotAsync());
+                e.Handled = true;
+            }
+            else if (e.Control && e.KeyCode == Keys.D1)
+            {
+                SetViewMode("split");
+                e.Handled = true;
+            }
+            else if (e.Control && e.KeyCode == Keys.D2)
+            {
+                SetViewMode("flow");
+                e.Handled = true;
+            }
+            else if (e.Control && e.KeyCode == Keys.D3)
+            {
+                SetViewMode("studio");
+                e.Handled = true;
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // Window state
+        // ------------------------------------------------------------------
+        private class UiState
+        {
+            public int X { get; set; }
+            public int Y { get; set; }
+            public int W { get; set; }
+            public int H { get; set; }
+            public bool Maximized { get; set; }
+            public int Splitter { get; set; }
+            public string Mode { get; set; }
+        }
+
+        private void RestoreWindowState()
+        {
+            try
+            {
+                if (!File.Exists(statePath)) return;
+                string raw = File.ReadAllText(statePath, Encoding.UTF8);
+                UiState st = Json.Deserialize<UiState>(raw);
+                if (st == null || st.W <= 200 || st.H <= 200) return;
+
+                Rectangle r = new Rectangle(st.X, st.Y, st.W, st.H);
+                bool onScreen = false;
+                foreach (Screen s in Screen.AllScreens)
+                {
+                    if (s.WorkingArea.IntersectsWith(r)) { onScreen = true; break; }
+                }
+                if (onScreen)
+                {
+                    this.StartPosition = FormStartPosition.Manual;
+                    this.Bounds = r;
+                }
+                this.WindowState = st.Maximized ? FormWindowState.Maximized : FormWindowState.Normal;
+                savedSplitter = st.Splitter;
+                if (!string.IsNullOrEmpty(st.Mode)) viewMode = st.Mode;
+                UpdateSegSelection(viewMode);
+            }
+            catch { }
+        }
+
+        private void SaveWindowState()
+        {
+            try
+            {
+                UiState st = new UiState();
+                Rectangle r = this.WindowState == FormWindowState.Normal ? this.Bounds : this.RestoreBounds;
+                st.X = r.X;
+                st.Y = r.Y;
+                st.W = r.Width;
+                st.H = r.Height;
+                st.Maximized = this.WindowState == FormWindowState.Maximized;
+                st.Splitter = (!split.Panel1Collapsed && !split.Panel2Collapsed) ? split.SplitterDistance : savedSplitter;
+                st.Mode = viewMode;
+                File.WriteAllText(statePath, Json.Serialize(st), Encoding.UTF8);
+            }
+            catch { }
+        }
+
+        // ------------------------------------------------------------------
+        // Shutdown
+        // ------------------------------------------------------------------
+        private void OnFormClosing(object sender, FormClosingEventArgs e)
         {
             telemetryTimer.Stop();
-            server.Stop();
-            base.OnFormClosing(e);
+            SaveWindowState();
+
+            try
+            {
+                if (wvFlow != null && wvFlow.CoreWebView2 != null) wvFlow.Dispose();
+            }
+            catch { }
+
+            notifier.Dispose();
+            AppIcon.Release(iconHandle);
         }
     }
 }

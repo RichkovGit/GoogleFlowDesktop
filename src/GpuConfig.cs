@@ -21,20 +21,22 @@ namespace GoogleFlowDesktop
         public double TotalRamGb { get; set; }
         public double FreeRamGb { get; set; }
         public double AppRamMb { get; set; }
+        public bool HasDgpu { get; set; }
 
         public HardwareSpecs()
         {
             DgpuName = "Дискретная видеокарта (dGPU)";
-            DgpuVram = "Выделенная VRAM";
+            DgpuVram = "выделенная VRAM";
             DgpuDriver = "";
             IgpuName = "Интегрированная графика (iGPU)";
-            IgpuVram = "2.0 GB";
-            CpuName = "Intel Core i5";
-            CpuCores = 6;
-            CpuThreads = 12;
+            IgpuVram = "общая память";
+            CpuName = "Процессор";
+            CpuCores = 4;
+            CpuThreads = 8;
             TotalRamGb = 16.0;
             FreeRamGb = 8.0;
-            AppRamMb = 25.0;
+            AppRamMb = 30.0;
+            HasDgpu = false;
         }
     }
 
@@ -46,7 +48,7 @@ namespace GoogleFlowDesktop
         [DllImport("user32.dll")]
         public static extern bool SetProcessDPIAware();
 
-        private static HardwareSpecs cachedSpecs = null;
+        private static HardwareSpecs cachedSpecs;
 
         public static HardwareSpecs DetectHardware()
         {
@@ -56,50 +58,55 @@ namespace GoogleFlowDesktop
                 return cachedSpecs;
             }
 
-            var specs = new HardwareSpecs();
+            HardwareSpecs specs = new HardwareSpecs();
+            Dictionary<string, ulong> vramByName = ReadVramFromRegistry();
 
-            // 1. Detect GPUs (Video Controllers)
+            // ---- 1. Video controllers ----
             try
             {
-                using (var searcher = new ManagementObjectSearcher("SELECT Name, AdapterRAM, DriverVersion FROM Win32_VideoController"))
+                using (ManagementObjectSearcher searcher =
+                    new ManagementObjectSearcher("SELECT Name, AdapterRAM, DriverVersion FROM Win32_VideoController"))
                 {
                     foreach (ManagementObject mo in searcher.Get())
                     {
                         string name = (mo["Name"] as string) ?? "";
-                        ulong ramBytes = 0;
-                        try { ramBytes = Convert.ToUInt64(mo["AdapterRAM"]); } catch { }
-                        string driver = (mo["DriverVersion"] as string) ?? "";
-                        double vramGb = Math.Round(ramBytes / (1024.0 * 1024.0 * 1024.0), 1);
+                        if (name.Length == 0) continue;
 
-                        if (name.IndexOf("NVIDIA", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                            name.IndexOf("GeForce", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                            name.IndexOf("Radeon RX", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                            name.IndexOf("Arc", StringComparison.OrdinalIgnoreCase) >= 0)
+                        string driver = (mo["DriverVersion"] as string) ?? "";
+                        ulong ramBytes = 0;
+                        if (vramByName.ContainsKey(name)) ramBytes = vramByName[name];
+                        if (ramBytes == 0)
+                        {
+                            try { ramBytes = Convert.ToUInt64(mo["AdapterRAM"]); } catch { }
+                        }
+                        string vram = FormatVram(ramBytes);
+
+                        if (IsDiscrete(name))
                         {
                             specs.DgpuName = name;
-                            if (vramGb > 0) specs.DgpuVram = vramGb.ToString("0.0") + " GB VRAM";
+                            specs.DgpuVram = vram;
                             specs.DgpuDriver = driver;
+                            specs.HasDgpu = true;
                         }
-                        else if (name.IndexOf("Intel", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                 name.IndexOf("UHD", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                 name.IndexOf("Iris", StringComparison.OrdinalIgnoreCase) >= 0)
+                        else if (IsIntegrated(name))
                         {
                             specs.IgpuName = name;
-                            if (vramGb > 0) specs.IgpuVram = vramGb.ToString("0.0") + " GB VRAM";
+                            specs.IgpuVram = vram;
                         }
                     }
                 }
             }
             catch { }
 
-            // 2. Detect CPU (Processor)
+            // ---- 2. CPU ----
             try
             {
-                using (var searcher = new ManagementObjectSearcher("SELECT Name, NumberOfCores, NumberOfLogicalProcessors FROM Win32_Processor"))
+                using (ManagementObjectSearcher searcher =
+                    new ManagementObjectSearcher("SELECT Name, NumberOfCores, NumberOfLogicalProcessors FROM Win32_Processor"))
                 {
                     foreach (ManagementObject mo in searcher.Get())
                     {
-                        specs.CpuName = ((mo["Name"] as string) ?? "Intel Processor").Trim();
+                        specs.CpuName = ((mo["Name"] as string) ?? "Процессор").Trim();
                         try { specs.CpuCores = Convert.ToInt32(mo["NumberOfCores"]); } catch { }
                         try { specs.CpuThreads = Convert.ToInt32(mo["NumberOfLogicalProcessors"]); } catch { }
                         break;
@@ -108,10 +115,11 @@ namespace GoogleFlowDesktop
             }
             catch { }
 
-            // 3. Detect Total System RAM
+            // ---- 3. RAM ----
             try
             {
-                using (var searcher = new ManagementObjectSearcher("SELECT TotalVisibleMemorySize, FreePhysicalMemory FROM Win32_OperatingSystem"))
+                using (ManagementObjectSearcher searcher =
+                    new ManagementObjectSearcher("SELECT TotalVisibleMemorySize, FreePhysicalMemory FROM Win32_OperatingSystem"))
                 {
                     foreach (ManagementObject mo in searcher.Get())
                     {
@@ -130,11 +138,84 @@ namespace GoogleFlowDesktop
             return specs;
         }
 
+        private static bool IsDiscrete(string name)
+        {
+            string n = name.ToLowerInvariant();
+            if (n.Contains("nvidia") || n.Contains("geforce") || n.Contains("quadro") || n.Contains("rtx")) return true;
+            if (n.Contains("radeon rx") || n.Contains("radeon pro") || n.Contains("firepro")) return true;
+            if (n.Contains("arc a") || n.Contains("arc b") || n.Contains("intel arc")) return true;
+            if (n.Contains("microsoft basic")) return false;
+            return false;
+        }
+
+        private static bool IsIntegrated(string name)
+        {
+            string n = name.ToLowerInvariant();
+            if (IsDiscrete(name)) return false;
+            if (n.Contains("intel") || n.Contains("uhd") || n.Contains("iris")) return true;
+            if (n.Contains("radeon") || n.Contains("vega")) return true;
+            return false;
+        }
+
+        private static string FormatVram(ulong bytes)
+        {
+            if (bytes < 1024UL * 1024UL) return "выделенная VRAM";
+            double gb = bytes / (1024.0 * 1024.0 * 1024.0);
+            if (gb >= 1.0) return gb.ToString("0.0") + " GB VRAM";
+            return Math.Round(bytes / (1024.0 * 1024.0), 0) + " MB VRAM";
+        }
+
+        /// <summary>
+        /// WMI's AdapterRAM is a 32-bit field and is unreliable above 4 GB.
+        /// The accurate value lives in the display class registry key as a QWORD.
+        /// </summary>
+        private static Dictionary<string, ulong> ReadVramFromRegistry()
+        {
+            Dictionary<string, ulong> result = new Dictionary<string, ulong>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                string classPath = @"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}";
+                using (RegistryKey baseKey = Registry.LocalMachine.OpenSubKey(classPath))
+                {
+                    if (baseKey == null) return result;
+                    foreach (string sub in baseKey.GetSubKeyNames())
+                    {
+                        if (sub.Length != 4) continue; // 0000, 0001, ...
+                        using (RegistryKey k = baseKey.OpenSubKey(sub))
+                        {
+                            if (k == null) continue;
+                            string desc = k.GetValue("DriverDesc") as string;
+                            if (string.IsNullOrEmpty(desc)) continue;
+
+                            ulong vram = 0;
+                            object qw = k.GetValue("HardwareInformation.qwMemorySize");
+                            if (qw != null)
+                            {
+                                try { vram = Convert.ToUInt64(qw); } catch { }
+                            }
+                            if (vram == 0)
+                            {
+                                object dw = k.GetValue("HardwareInformation.MemorySize");
+                                if (dw != null)
+                                {
+                                    try { vram = Convert.ToUInt64(dw); } catch { }
+                                }
+                            }
+                            if (vram > 0 && !result.ContainsKey(desc)) result[desc] = vram;
+                        }
+                    }
+                }
+            }
+            catch { }
+            return result;
+        }
+
         public static string GetPrimaryGpuName()
         {
             return DetectHardware().DgpuName;
         }
 
+        /// <summary>Writes GpuPreference=2 (High performance) for this app and the WebView2 runtime.</summary>
         public static bool EnforceWindowsDirectXGpuPreference()
         {
             bool success = false;
@@ -143,24 +224,17 @@ namespace GoogleFlowDesktop
                 string keyPath = @"Software\Microsoft\DirectX\UserGpuPreferences";
                 using (RegistryKey key = Registry.CurrentUser.CreateSubKey(keyPath))
                 {
-                    if (key != null)
-                    {
-                        string currentExe = Process.GetCurrentProcess().MainModule.FileName;
-                        key.SetValue(currentExe, "GpuPreference=2;");
-                        success = true;
+                    if (key == null) return false;
 
-                        string webviewDir = @"C:\Program Files (x86)\Microsoft\EdgeWebView\Application";
-                        if (Directory.Exists(webviewDir))
-                        {
-                            foreach (string exe in Directory.GetFiles(webviewDir, "msedgewebview2.exe", SearchOption.AllDirectories))
-                            {
-                                try
-                                {
-                                    key.SetValue(exe, "GpuPreference=2;");
-                                }
-                                catch { }
-                            }
-                        }
+                    string currentExe = Process.GetCurrentProcess().MainModule.FileName;
+                    key.SetValue(currentExe, "GpuPreference=2;");
+                    success = true;
+
+                    // WebView2 runtime that is actually in use on this machine.
+                    string runtimeExe = GetWebView2RuntimeExe();
+                    if (!string.IsNullOrEmpty(runtimeExe))
+                    {
+                        try { key.SetValue(runtimeExe, "GpuPreference=2;"); } catch { }
                     }
                 }
             }
@@ -168,27 +242,60 @@ namespace GoogleFlowDesktop
             return success;
         }
 
+        /// <summary>Locates msedgewebview2.exe without scanning the whole disk.</summary>
+        public static string GetWebView2RuntimeExe()
+        {
+            try
+            {
+                string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                string[] roots = new string[]
+                {
+                    Path.Combine(local, "Microsoft", "EdgeWebView", "Application"),
+                    @"C:\Program Files (x86)\Microsoft\EdgeWebView\Application",
+                    @"C:\Program Files\Microsoft\EdgeWebView\Application"
+                };
+                string best = null;
+                DateTime bestTime = DateTime.MinValue;
+                foreach (string root in roots)
+                {
+                    if (!Directory.Exists(root)) continue;
+                    foreach (string dir in Directory.GetDirectories(root))
+                    {
+                        string exe = Path.Combine(dir, "msedgewebview2.exe");
+                        if (!File.Exists(exe)) continue;
+                        DateTime t = File.GetLastWriteTimeUtc(exe);
+                        if (best == null || t > bestTime) { best = exe; bestTime = t; }
+                    }
+                }
+                return best;
+            }
+            catch { return null; }
+        }
+
+        /// <summary>Chromium/WebView2 switches for discrete-GPU acceleration.</summary>
         public static string GetChromiumDgpuArguments()
         {
-            return " " + string.Join(" ", new string[] {
+            string[] args = new string[]
+            {
                 "--force_high_performance_gpu",
-                "--gpu-preference=2",
                 "--enable-gpu-rasterization",
                 "--enable-zero-copy",
                 "--ignore-gpu-blocklist",
-                "--enable-features=VaapiVideoDecoder,D3D11VideoDecoder,PlatformHEVCDecoderSupport",
                 "--enable-accelerated-video-decode",
-                "--enable-accelerated-mjpeg-decode"
-            });
+                "--enable-accelerated-mjpeg-decode",
+                "--enable-features=PlatformHEVCDecoderSupport,CanvasOopRasterization",
+                "--use-angle=d3d11"
+            };
+            return " " + string.Join(" ", args);
         }
 
+        /// <summary>Explicit user-requested working-set trim (never called on a timer).</summary>
         public static void TrimProcessMemory()
         {
             try
             {
-                GC.Collect();
+                GC.Collect(2, GCCollectionMode.Optimized);
                 GC.WaitForPendingFinalizers();
-                GC.Collect();
                 SetProcessWorkingSetSize(Process.GetCurrentProcess().Handle, -1, -1);
             }
             catch { }
@@ -198,14 +305,14 @@ namespace GoogleFlowDesktop
         {
             try
             {
-                using (var proc = Process.GetCurrentProcess())
+                using (Process proc = Process.GetCurrentProcess())
                 {
                     return Math.Round(proc.WorkingSet64 / (1024.0 * 1024.0), 1);
                 }
             }
             catch
             {
-                return 25.0;
+                return 30.0;
             }
         }
     }

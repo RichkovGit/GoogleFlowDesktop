@@ -7,6 +7,7 @@ updater.bat
 *.obj
 push*.bat
 test*.bat
+smoke.png
 
 # IDE & Editor files
 .vs/

@@ -4,8 +4,8 @@ using System.Net.Http;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Collections.Generic;
+using System.Text;
 using System.Web.Script.Serialization;
-using System.Windows.Forms;
 
 namespace GoogleFlowDesktop
 {
@@ -27,67 +27,58 @@ namespace GoogleFlowDesktop
 
     public static class UpdateManager
     {
-        public const string CurrentVersion = "1.0.0";
+        public const string CurrentVersion = "1.1.0";
         private const string VersionCheckUrl = "https://raw.githubusercontent.com/RichkovGit/GoogleFlowDesktop/main/version.json";
         private static readonly HttpClient Client = new HttpClient();
         private static readonly JavaScriptSerializer Json = new JavaScriptSerializer();
 
         static UpdateManager()
         {
-            Client.Timeout = TimeSpan.FromSeconds(6);
+            Client.Timeout = TimeSpan.FromSeconds(10);
             Client.DefaultRequestHeaders.UserAgent.ParseAdd("GoogleFlowDesktop/" + CurrentVersion);
         }
 
         public static async Task<UpdateInfo> CheckForUpdatesAsync()
         {
-            var result = new UpdateInfo
-            {
-                CurrentVersion = CurrentVersion,
-                HasUpdate = false
-            };
+            UpdateInfo result = new UpdateInfo();
+            result.CurrentVersion = CurrentVersion;
+            result.HasUpdate = false;
 
             try
             {
                 string jsonString = await Client.GetStringAsync(VersionCheckUrl);
                 if (string.IsNullOrEmpty(jsonString))
                 {
-                    result.Error = "Пустой ответ от сервера обновлений";
+                    result.Error = "Пустой ответ сервера обновлений";
                     return result;
                 }
 
-                var dict = Json.Deserialize<Dictionary<string, object>>(jsonString);
-                if (dict != null && dict.ContainsKey("version"))
+                Dictionary<string, object> dict = Json.Deserialize<Dictionary<string, object>>(jsonString);
+                if (dict == null || !dict.ContainsKey("version"))
                 {
-                    string latestVer = dict["version"].ToString().Trim();
-                    result.LatestVersion = latestVer;
+                    result.Error = "Некорректный формат version.json";
+                    return result;
+                }
 
-                    if (dict.ContainsKey("download_url"))
-                    {
-                        result.DownloadUrl = dict["download_url"].ToString();
-                    }
+                string latestVer = dict["version"].ToString().Trim();
+                result.LatestVersion = latestVer;
 
-                    if (dict.ContainsKey("release_date"))
-                    {
-                        result.ReleaseDate = dict["release_date"].ToString();
-                    }
+                if (dict.ContainsKey("download_url")) result.DownloadUrl = dict["download_url"].ToString();
+                if (dict.ContainsKey("release_date")) result.ReleaseDate = dict["release_date"].ToString();
 
-                    if (dict.ContainsKey("release_notes"))
+                if (dict.ContainsKey("release_notes"))
+                {
+                    System.Collections.ArrayList notes = dict["release_notes"] as System.Collections.ArrayList;
+                    if (notes != null)
                     {
-                        var notesArr = dict["release_notes"] as System.Collections.ArrayList;
-                        if (notesArr != null)
+                        foreach (object n in notes)
                         {
-                            foreach (var n in notesArr)
-                            {
-                                if (n != null) result.ReleaseNotes.Add(n.ToString());
-                            }
+                            if (n != null) result.ReleaseNotes.Add(n.ToString());
                         }
                     }
-
-                    Version cur = ParseVersion(CurrentVersion);
-                    Version lat = ParseVersion(latestVer);
-
-                    result.HasUpdate = (lat > cur);
                 }
+
+                result.HasUpdate = ParseVersion(latestVer) > ParseVersion(CurrentVersion);
             }
             catch (Exception ex)
             {
@@ -97,96 +88,98 @@ namespace GoogleFlowDesktop
             return result;
         }
 
-        public static async Task<bool> DownloadAndApplyUpdateAsync(string downloadUrl, Action<int> progressCallback = null)
+        /// <summary>
+        /// Downloads the new binary and relaunches it through a small helper script.
+        /// Returns the path of the downloaded binary on success; the caller is
+        /// responsible for shutting the application down.
+        /// </summary>
+        public static async Task<string> DownloadAndApplyUpdateAsync(string downloadUrl, Action<int> progressCallback)
         {
+            string appDir = AppDomain.CurrentDomain.BaseDirectory;
+            string currentExe = Process.GetCurrentProcess().MainModule.FileName;
+            string tempNewExe = Path.Combine(appDir, "GoogleFlowDesktop_update.tmp");
+            string updaterBat = Path.Combine(appDir, "updater.bat");
+
             try
             {
-                string appDir = AppDomain.CurrentDomain.BaseDirectory;
-                string currentExe = Process.GetCurrentProcess().MainModule.FileName;
-                string tempNewExe = Path.Combine(appDir, "GoogleFlowDesktop_update.tmp");
-                string updaterBat = Path.Combine(appDir, "updater.bat");
+                if (File.Exists(tempNewExe)) File.Delete(tempNewExe);
 
-                // Download new binary directly with streaming
-                using (var response = await Client.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead))
+                using (HttpResponseMessage response = await Client.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead))
                 {
                     response.EnsureSuccessStatusCode();
                     long totalBytes = response.Content.Headers.ContentLength ?? -1L;
 
-                    using (var stream = await response.Content.ReadAsStreamAsync())
-                    using (var fs = new FileStream(tempNewExe, FileMode.Create, FileAccess.Write, FileShare.None, 8192))
+                    using (System.IO.Stream stream = await response.Content.ReadAsStreamAsync())
+                    using (FileStream fs = new FileStream(tempNewExe, FileMode.Create, FileAccess.Write, FileShare.None, 65536))
                     {
-                        byte[] buffer = new byte[8192];
+                        byte[] buffer = new byte[65536];
                         long totalRead = 0;
                         int bytesRead;
-
                         while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
                         {
                             await fs.WriteAsync(buffer, 0, bytesRead);
                             totalRead += bytesRead;
-
                             if (totalBytes > 0 && progressCallback != null)
                             {
-                                int pct = (int)((totalRead * 100) / totalBytes);
-                                progressCallback(pct);
+                                progressCallback((int)((totalRead * 100) / totalBytes));
                             }
                         }
                     }
                 }
 
-                if (!File.Exists(tempNewExe) || new FileInfo(tempNewExe).Length < 10000)
+                FileInfo fi = new FileInfo(tempNewExe);
+                if (!fi.Exists || fi.Length < 65536)
                 {
-                    throw new Exception("Загруженный файл поврежден или пуст");
+                    throw new Exception("Загруженный файл повреждён или слишком мал");
+                }
+
+                // Validate the PE signature ("MZ") so we never replace the app with HTML/error page.
+                byte[] head = new byte[2];
+                using (FileStream fs = new FileStream(tempNewExe, FileMode.Open, FileAccess.Read))
+                {
+                    fs.Read(head, 0, 2);
+                }
+                if (head[0] != 0x4D || head[1] != 0x5A)
+                {
+                    throw new Exception("Загруженный файл не является исполняемым (MZ)");
                 }
 
                 int currentPid = Process.GetCurrentProcess().Id;
 
-                // Create standalone updater batch script
-                string batScript = string.Format(@"@echo off
-setlocal
-chcp 65001 >nul
-title Google Flow Desktop Updater
-echo Ожидание завершения процесса #{0}...
-:wait_loop
-tasklist /fi ""PID eq {0}"" 2>nul | find ""{0}"" >nul
-if not errorlevel 1 (
-    timeout /t 1 /nobreak >nul
-    goto wait_loop
-)
+                string bat = string.Concat(
+                    "@echo off\r\n",
+                    "title Google Flow Desktop Updater\r\n",
+                    ":wait\r\n",
+                    "tasklist /fi \"PID eq ", currentPid.ToString(), "\" 2>nul | find \"", currentPid.ToString(), "\" >nul\r\n",
+                    "if not errorlevel 1 (\r\n",
+                    "    timeout /t 1 /nobreak >nul\r\n",
+                    "    goto wait\r\n",
+                    ")\r\n",
+                    ":replace\r\n",
+                    "move /y \"", tempNewExe, "\" \"", currentExe, "\" >nul 2>&1\r\n",
+                    "if errorlevel 1 (\r\n",
+                    "    timeout /t 1 /nobreak >nul\r\n",
+                    "    goto replace\r\n",
+                    ")\r\n",
+                    "start \"\" \"", currentExe, "\"\r\n",
+                    "del \"%~f0\"\r\n");
 
-echo Замена бинарного файла на актуальную версию...
-move /y ""{1}"" ""{2}"" >nul
+                File.WriteAllText(updaterBat, bat, Encoding.Default);
 
-echo Запуск обновленного Google Flow Desktop...
-start """" ""{2}""
-
-echo Очистка временных файлов...
-(goto) 2>nul & del ""%~f0""
-exit
-", currentPid, tempNewExe, currentExe);
-
-                File.WriteAllText(updaterBat, batScript, System.Text.Encoding.GetEncoding(866));
-
-                // Launch updater script detached
-                var psi = new ProcessStartInfo
-                {
-                    FileName = "cmd.exe",
-                    Arguments = "/c \"" + updaterBat + "\"",
-                    CreateNoWindow = true,
-                    UseShellExecute = true,
-                    WindowStyle = ProcessWindowStyle.Hidden,
-                    WorkingDirectory = appDir
-                };
-
+                ProcessStartInfo psi = new ProcessStartInfo();
+                psi.FileName = "cmd.exe";
+                psi.Arguments = "/c \"" + updaterBat + "\"";
+                psi.CreateNoWindow = true;
+                psi.UseShellExecute = false;
+                psi.WorkingDirectory = appDir;
                 Process.Start(psi);
 
-                // Exit current process
-                Application.Exit();
-                return true;
+                return tempNewExe;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine("[UpdateManager] Error applying update: " + ex.Message);
-                return false;
+                Debug.WriteLine("[UpdateManager] " + ex.Message);
+                throw;
             }
         }
 
