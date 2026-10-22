@@ -1,0 +1,6 @@
+FFmpeg 7.1 essentials_build by www.gyan.dev, copied from the user's existing installation.
+FFmpeg is a separate process, licensed under GNU GPL version 3 or later for this build.
+License: COPYING.GPLv3 in this folder.
+Upstream source: https://ffmpeg.org/releases/ffmpeg-7.1.tar.xz
+Build provider and build/source information: https://www.gyan.dev/ffmpeg/builds/
+Build identity/configuration can be read with ffmpeg.exe -version.
