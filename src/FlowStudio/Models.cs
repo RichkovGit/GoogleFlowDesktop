@@ -46,6 +46,7 @@ public sealed class CloudProjectCard
     public string Title { get; init; } = "";
     public DateTime Updated { get; init; }
     public string Detail { get; init; } = "";
+    public override string ToString() => Title;
 }
 public class Job : Observable
 {

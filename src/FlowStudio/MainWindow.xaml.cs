@@ -407,6 +407,8 @@ public partial class MainWindow : Window
     {
         page=target;
         SetExtraPage(target);
+        if(target=="agent"&&agentProjectBox.SelectedItem==null)
+            agentProjectBox.SelectedItem=cloudProjects.FirstOrDefault(p=>p.Id==CloudProjectBox.Text.Trim().Replace("projects/",""));
         LibraryPage.Visibility=target=="library"?Visibility.Visible:Visibility.Collapsed;
         QueuePage.Visibility=target=="queue"?Visibility.Visible:Visibility.Collapsed;
         SettingsPage.Visibility=target=="settings"?Visibility.Visible:Visibility.Collapsed;
@@ -733,8 +735,9 @@ public partial class MainWindow : Window
                 return;
             }
             libraryCancellation?.Cancel();if(libraryTask!=null)await libraryTask;
+            if(pendingUpdateStage!=null)AppUpdateService.StartInstaller(pendingUpdateStage);
             lifetime.Cancel();if(previewTask!=null)await previewTask;
-            await serviceBrowser.DisposeAsync();creditTimer.Stop();notifications?.Dispose();VideoPreview.Close();http.Dispose();mediaHttp.Dispose();if(pendingUpdateStage!=null)AppUpdateService.StartInstaller(pendingUpdateStage);closing=true;Close();
+            await serviceBrowser.DisposeAsync();creditTimer.Stop();notifications?.Dispose();VideoPreview.Close();http.Dispose();mediaHttp.Dispose();closing=true;Close();
         }
         catch(Exception ex) { Error(ex); }
         finally

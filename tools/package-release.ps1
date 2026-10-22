@@ -1,4 +1,4 @@
-param([string]$Version='2.0.0',[string]$BuildDirectory)
+param([string]$Version='2.0.1',[string]$BuildDirectory)
 $ErrorActionPreference='Stop'
 $workspace=Split-Path -Parent $PSScriptRoot
 $build=if($BuildDirectory){[IO.Path]::GetFullPath($BuildDirectory)}else{Join-Path $workspace ('artifacts\FlowStudio-'+$Version)}

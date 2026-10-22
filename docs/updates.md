@@ -11,8 +11,8 @@ Flow Studio 2.x проверяет последний обычный релиз 
 ## Выпуск издателем
 
 ```powershell
-.\build.ps1 -SelfContained -OutputDirectory .\artifacts\FlowStudio-2.0.0
-.\tools\package-release.ps1 -Version 2.0.0
+.\build.ps1 -SelfContained -OutputDirectory .\artifacts\FlowStudio-2.0.1
+.\tools\package-release.ps1 -Version 2.0.1
 ```
 
 Закрытый ключ хранится за пределами репозитория в `%LOCALAPPDATA%\FlowStudioPublisher\update-key.bin`, защищён Windows DPAPI CurrentUser. Он не входит в сборку или GitHub. Перед выпуском проверьте self-test и реальные сценарии, затем загрузите три файла из `artifacts/release-<version>` в релиз с тегом `v<version>`. Скрипт подписания проверяет соответствие закрытого ключа открытому ключу, встроенному в программу. Ключ необходимо отдельно резервировать защищённым способом; его потеря не исправляется произвольной генерацией нового ключа для уже установленных клиентов.

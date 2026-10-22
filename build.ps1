@@ -12,6 +12,7 @@ if ($SelfContained) {
 }
 if ($LASTEXITCODE -ne 0) { throw 'Сборка Flow Studio не удалась.' }
 Copy-Item -LiteralPath (Join-Path $workspace 'README.md') -Destination (Join-Path $output 'README.md') -Force
+Copy-Item -LiteralPath (Join-Path $workspace 'LICENSE') -Destination (Join-Path $output 'LICENSE') -Force
 New-Item -ItemType Directory -Force -Path (Join-Path $output 'docs') | Out-Null
 Copy-Item -LiteralPath (Join-Path $workspace 'docs\hardware.md'),(Join-Path $workspace 'docs\verification.md'),(Join-Path $workspace 'docs\automation.md') -Destination (Join-Path $output 'docs') -Force
 Copy-Item -LiteralPath (Join-Path $workspace 'docs\updates.md'),(Join-Path $workspace 'docs\flow-interface-audit.md') -Destination (Join-Path $output 'docs') -Force

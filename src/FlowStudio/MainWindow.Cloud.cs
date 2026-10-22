@@ -110,7 +110,8 @@ public partial class MainWindow
             var projects=await service.ListProjectsAsync(credential,token);
             if(revision!=accountRevision)throw new OperationCanceledException();
             var fresh=new List<(FlowCloudProjectInfo Project,FlowCloudMediaInfo Media)>();
-            cloudProjects.Clear();
+            var selectedAgentProject=(agentProjectBox.SelectedItem as CloudProjectCard)?.Id;
+            var freshProjects=new List<CloudProjectCard>();
             for(var i=0;i<projects.Count;i++)
             {
                 token.ThrowIfCancellationRequested();
@@ -118,8 +119,10 @@ public partial class MainWindow
                 var items=await service.ListMediaAsync(projects[i].Id,credential,token);
                 if(revision!=accountRevision)throw new OperationCanceledException();
                 fresh.AddRange(items.Select(m=>(projects[i],m)));
-                cloudProjects.Add(new(){Id=projects[i].Id,Title=projects[i].Title,Updated=projects[i].UpdatedAt?.LocalDateTime??DateTime.MinValue,Detail=$"{items.Count} {Plural(items.Count,"материал","материала","материалов")}"+(projects[i].UpdatedAt is {} date?$"  ·  {date.LocalDateTime:dd.MM.yyyy HH:mm}":"")});
+                freshProjects.Add(new(){Id=projects[i].Id,Title=projects[i].Title,Updated=projects[i].UpdatedAt?.LocalDateTime??DateTime.MinValue,Detail=$"{items.Count} {Plural(items.Count,"материал","материала","материалов")}"+(projects[i].UpdatedAt is {} date?$"  ·  {date.LocalDateTime:dd.MM.yyyy HH:mm}":"")});
             }
+            cloudProjects.Clear();foreach(var project in freshProjects)cloudProjects.Add(project);
+            if(selectedAgentProject!=null)agentProjectBox.SelectedItem=cloudProjects.FirstOrDefault(p=>p.Id==selectedAgentProject);
             cloudAssets.Clear();cloudMedia.Clear();
             foreach(var (project,media) in fresh.OrderByDescending(p=>p.Media.CreatedAt))
             {

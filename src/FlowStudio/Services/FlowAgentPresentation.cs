@@ -20,12 +20,19 @@ public static class FlowAgentPresentation
                     using var json=JsonDocument.Parse(match.Groups["json"].Value,new JsonDocumentOptions{MaxDepth=40});
                     if(json.RootElement.ValueKind!=JsonValueKind.Array||!json.RootElement.EnumerateArray().Any(e=>e.ValueKind==JsonValueKind.Object&&e.TryGetProperty("surfaceUpdate",out _)))return match.Value;
                     var before=cards.Count;
+                    var paragraphs=new List<string>();
                     string Literal(JsonElement value)=>value.ValueKind==JsonValueKind.Object&&value.TryGetProperty("literalString",out var literal)&&literal.ValueKind==JsonValueKind.String?literal.GetString()??"":"";
                     void Visit(JsonElement value)
                     {
                         if(cards.Count>=32)return;
                         if(value.ValueKind==JsonValueKind.Array){foreach(var child in value.EnumerateArray())Visit(child);return;}
                         if(value.ValueKind!=JsonValueKind.Object)return;
+                        if(value.TryGetProperty("Text",out var textComponent)&&textComponent.ValueKind==JsonValueKind.Object&&textComponent.TryGetProperty("text",out var textValue))
+                        {
+                            var paragraph=Literal(textValue);
+                            if(paragraph.Contains("\\n\\n",StringComparison.Ordinal))paragraph=paragraph.Replace("\\n","\n",StringComparison.Ordinal);
+                            if(!string.IsNullOrWhiteSpace(paragraph))paragraphs.Add(paragraph);
+                        }
                         foreach(var kind in new[]{"video","image"})
                             if(value.TryGetProperty(kind,out var media))
                             {
@@ -37,7 +44,9 @@ public static class FlowAgentPresentation
                         foreach(var child in value.EnumerateObject())Visit(child.Value);
                     }
                     Visit(json.RootElement);
-                    return cards.Count>before?"[Результаты Flow — в карточках ниже]":"[Интерактивный блок Flow]";
+                    var message=string.Join("\n\n",paragraphs.Distinct(StringComparer.Ordinal));
+                    if(cards.Count>before)message+=(message.Length>0?"\n\n":"")+"[Результаты Flow — в карточках ниже]";
+                    return message.Length>0?message:"[Интерактивный блок Flow]";
                 }
                 catch(JsonException){return match.Value;}
             });
@@ -51,6 +60,9 @@ public static class FlowAgentPresentation
         var payload="```json\n[{\"surfaceUpdate\":{\"components\":[{\"component\":{\"MultipleChoice\":{\"options\":[{\"video\":{\"literalString\":\""+id+"\"},\"description\":{\"literalString\":\"Scene 1\"}}]}}}]}}]\n```\nГотово";
         var display=Parse(payload);if(display.Media.Count!=1||display.Media[0].MediaId!=id||display.Media[0].Caption!="Scene 1"||display.Text.Contains("surfaceUpdate")||!display.Text.Contains("Готово"))throw new InvalidOperationException("Agent media presentation failed.");
         if(Parse("```json\n{\"ordinary\":true}\n```").Text.Contains("Интерактивный"))throw new InvalidOperationException("Ordinary JSON was changed.");
-        return Task.FromResult("A2UI media cards rendered without executing actions/URLs, ordinary code preserved, bounded parsing.");
+        var textBlock="```json\n[{\"surfaceUpdate\":{\"components\":[{\"component\":{\"Text\":{\"text\":{\"literalString\":\"Три сцены готовы.\\\\n\\\\nКаждая по 10 секунд.\"}}}}]}}]\n```";
+        var textDisplay=Parse(textBlock);
+        if(!textDisplay.Text.Contains("Три сцены готовы.\n\nКаждая по 10 секунд.")||textDisplay.Text.Contains("Интерактивный блок"))throw new InvalidOperationException("A2UI agent prose was hidden or newlines were lost.");
+        return Task.FromResult("A2UI media cards and actual Text prose rendered without executing actions/URLs, ordinary code preserved, bounded parsing.");
     }
 }

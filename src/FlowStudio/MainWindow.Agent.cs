@@ -19,7 +19,7 @@ public partial class MainWindow
     {
         CreateFeaturePage("agent","Агент Flow","Сеансы и ответы агента вашего аккаунта Google Flow.",out var body);
         agentProjectBox=new ComboBox{ItemsSource=cloudProjects,DisplayMemberPath="Title",MinWidth=300,HorizontalAlignment=HorizontalAlignment.Stretch,Margin=new Thickness(0,0,0,10)};
-        agentProjectBox.SelectionChanged+=async(_,_)=>{if(!generating)await LoadAgentSessionsAsync();};body.Children.Add(agentProjectBox);
+        agentProjectBox.SelectionChanged+=async(_,_)=>{if(!generating&&cloudSyncGate.CurrentCount>0)await LoadAgentSessionsAsync();};body.Children.Add(agentProjectBox);
         var actions=new WrapPanel();actions.Children.Add(ActionButton("Обновить сеансы",LoadAgentSessionsAsync));actions.Children.Add(ActionButton("Новый сеанс",NewAgentSessionAsync,true));actions.Children.Add(ActionButton("Инструкции и настройки",EditAgentSettingsAsync));body.Children.Add(actions);
         agentSessions=new ListBox{DisplayMemberPath="Title",Height=110};
         agentSessions.SelectionChanged+=async(_,_)=>
